@@ -2,15 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// Datos de ejemplo para las tarjetas
 const DATA = [
   { id: '1', name: 'Camisa Lino', color: '#FFF', info: 'Ctdad: 1 | Talla: M' },
   { id: '2', name: 'Jeans Rectos', color: '#2E5A88', info: 'Ctdad: 1 | Talla: M' },
   { id: '3', name: 'Vestido Floral', color: 'multi', info: 'Ctdad: 1 | Talla: M' },
   { id: '4', name: 'Chaqueta Café', color: '#A67B5B', info: 'Ctdad: 1 | Talla: M' },
   { id: '5', name: 'Jackets', color: '#7BA3BE', info: 'Ctdad: 1 | Talla: M' },
-  { id: '6', name: 'Jeans Bino', color: '#88A498', info: 'Ctdad: 1 | Talla: M' },
-  // Agrega más según necesites...
+  { id: '6', name: 'Jeans Verde Esmeralda', color: '#88A498', info: 'Ctdad: 1 | Talla: M' },
 ];
 
 const InventarioScreen = () => {
