@@ -1,20 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Para los iconos del menú inferior
+import { Ionicons } from '@expo/vector-icons'; 
 
 const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        {/* Header */}
         <View style={styles.header}>
           <Ionicons name="shirt-outline" size={28} color="#555" />
           <Text style={styles.headerTitle}>INICIO</Text>
           <View style={{ width: 28 }} /> 
         </View>
 
-        {/* Card: Outfit del Día */}
         <View style={styles.outfitCard}>
           <Text style={styles.cardTitle}>OUTFIT DEL DÍA</Text>
           

@@ -38,7 +38,7 @@ const InventarioScreen = () => {
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Selector de Pestañas (PRENDAS | OUTFITS) */}
+      {/* menú de  (PRENDAS | OUTFITS) */}
       <View style={styles.tabContainer}>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'PRENDAS' && styles.activeTab]} 
@@ -55,7 +55,7 @@ const InventarioScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Grid de productos */}
+      {/* grid de productos */}
       <FlatList
         data={DATA}
         renderItem={renderItem}

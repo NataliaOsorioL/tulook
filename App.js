@@ -7,10 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './screens/HomeScreen';
 import InventoryScreen from './screens/InventoryScreen';
 
-// Componentes temporales para que no te dé error el código
-// Luego los moverás a sus propios archivos como hiciste con HomeScreen
+// components temporales para que no dé error el código
 const PlaceholderScreen = ({ name }) => (
-  <HomeScreen /> // Por ahora, todas muestran el inicio para probar
+  <HomeScreen /> // por ahora las pantallas que aún no están desarrolladas mostrarán la página de inicio para verificar que si funcionen
 );
 
 const Tab = createBottomTabNavigator();
