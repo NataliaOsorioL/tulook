@@ -6,6 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import HomeScreen from './screens/HomeScreen';
 import InventoryScreen from './screens/InventoryScreen';
+import OutfitScreen from './screens/OutfitScreen';
+import StatisticsScreen from './screens/StatisticScreen';
+import ConfigurationScreen from './screens/ConfigurationScreen';
 
 // components temporales para que no dé error el código
 const PlaceholderScreen = ({ name }) => (
@@ -52,21 +55,21 @@ export default function App() {
         />
         <Tab.Screen 
           name="Crear Outfit" 
-          component={PlaceholderScreen} 
+          component={OutfitScreen} 
           options={{
             tabBarIcon: ({ color }) => <Ionicons name="shirt-outline" size={24} color={color} />
           }}
         />
         <Tab.Screen 
           name="Estadísticas" 
-          component={PlaceholderScreen} 
+          component={StatisticsScreen} 
           options={{
             tabBarIcon: ({ color }) => <Ionicons name="bar-chart-outline" size={24} color={color} />
           }}
         />
         <Tab.Screen 
           name="Configuración" 
-          component={PlaceholderScreen} 
+          component={ConfigurationScreen} 
           options={{
             tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} />
           }}
