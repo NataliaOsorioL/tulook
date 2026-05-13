@@ -7,12 +7,11 @@ import { mapOwmIconToIonicon, buildWeatherText, getDefaultWeather } from '../uti
 
 const OWM_BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
 const FETCH_TIMEOUT_MS = 10000;
-const DEFAULT_API_KEY = 'bfa8d7a75a5b60f9c6e96f73da1a6b74';
 
-let _owmApiKey = DEFAULT_API_KEY;
+let _owmApiKey = process.env.EXPO_PUBLIC_OWM_API_KEY || null;
 
 export function setWeatherApiKey(apiKey) {
-  _owmApiKey = apiKey || DEFAULT_API_KEY;
+  _owmApiKey = apiKey || null;
 }
 
 function buildLocationKey(lat, lng) {

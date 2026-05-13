@@ -21,18 +21,6 @@ export function useGarments() {
       const garments = await getGarmentsByUser(userId);
 
       const grouped = groupByCategory(garments);
-
-      const rawCats = garments.map((g) => `"${g.category}"`);
-      const catCounts = {};
-      for (const g of garments) {
-        const c = g.category || '(missing)';
-        catCounts[c] = (catCounts[c] || 0) + 1;
-      }
-      console.log('[useGarments] RAW categories from Firestore:', rawCats.join(', '));
-      console.log('[useGarments] Category counts:', JSON.stringify(catCounts));
-      console.log('[useGarments] Grouped counts:', Object.fromEntries(
-        Object.entries(grouped).map(([k, v]) => [k, v.length]),
-      ));
       console.log(`[useGarments] Loaded ${garments.length} garments`);
       if (mountedRef.current) {
         setAllGarments(garments);

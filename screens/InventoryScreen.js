@@ -182,7 +182,6 @@ const InventarioScreen = () => {
   }, [isDeleting, allGarments, deleteAllGarments, refresh]);
 
   const renderItem = ({ item }) => {
-    console.log('[Inventory] renderItem for:', item.id, item.name);
     return (
       <View style={themedStyles.card}>
         <TouchableOpacity

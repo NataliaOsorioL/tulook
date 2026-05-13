@@ -68,15 +68,12 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
-    console.log('[Config] Cerrar sesión - pendiente implementar con Firebase Auth');
   };
 
   const handleEditProfile = () => {
-    console.log('[Config] Editar perfil - pendiente implementar');
   };
 
   const handleChangePassword = () => {
-    console.log('[Config] Cambiar contraseña - pendiente implementar');
   };
 
   if (isLoading) {

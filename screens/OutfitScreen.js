@@ -103,7 +103,6 @@ export default function CreateOutfitScreen() {
   const s = useMemo(() => getStyles(colors), [colors]);
 
   const { garmentsByCategory, allGarments, isLoading, error: loadError } = useGarments();
-  console.log('[Outfit] Render — isLoading:', isLoading, 'garments:', allGarments?.length);
 
   const [selectedCategory, setSelectedCategory] = useState(GARMENT_CATEGORIES.TOP);
   const [selectedById, setSelectedById] = useState({});
@@ -114,15 +113,6 @@ export default function CreateOutfitScreen() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   const lastModeRef = useRef(null);
-
-  // Diagnostic log — runs only after state is fully declared and data is loaded
-  if (allGarments?.length > 0 && !isLoading) {
-    const counts = {};
-    for (const cat of CATEGORY_ORDER) {
-      counts[cat] = (garmentsByCategory[cat] || []).length;
-    }
-    console.log('[Outfit] garmentsByCategory counts:', JSON.stringify(counts), '| selectedById keys:', Object.keys(selectedById));
-  }
 
   // Global validation gate — runs only after data is loaded and initial state is built
   const outfitValidation = useMemo(
