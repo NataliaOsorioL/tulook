@@ -1,159 +1,173 @@
-import { View,Text,StyleSheet,TouchableOpacity,ScrollView,Image } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
+import { getGarmentsByUser } from '../src/services/garment.service';
+import { ensureSignedIn } from '../src/services/auth.service';
+import { useTheme } from '../src/context/ThemeContext';
+
+const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const MONTHS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function computeColorDistribution(garments) {
+  const colorMap = {};
+  for (const g of garments) {
+    const name = g.color_name || g.color_hex || 'Otro';
+    colorMap[name] = (colorMap[name] || 0) + 1;
+  }
+
+  const total = garments.length || 1;
+  const entries = Object.entries(colorMap)
+    .map(([name, count]) => ({
+      name,
+      count,
+      pct: Math.round((count / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return entries;
+}
+
+function computeForgottenGarments(garments) {
+  const sixMonthsAgo = Date.now() - 6 * MONTHS_MS;
+  return garments.filter((g) => {
+    if (!g.last_used_at && g.times_used === 0) return true;
+    const lastUsed = g.last_used_at?.toDate?.() || new Date(g.last_used_at || 0);
+    return lastUsed.getTime() < sixMonthsAgo;
+  });
+}
+
 export default function StatisticsScreen() {
+  const { colors } = useTheme();
+  const themedStyles = useMemo(() => getStyles(colors), [colors]);
+
+  const [garments, setGarments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    loadStats();
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      setIsLoading(true);
+      const userId = await ensureSignedIn();
+      const allGarments = await getGarmentsByUser(userId);
+      if (mountedRef.current) setGarments(allGarments);
+    } catch (err) {
+      console.warn('[Stats] Error:', err.message);
+    } finally {
+      if (mountedRef.current) setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={themedStyles.container}>
+        <View style={themedStyles.header}>
+          <Ionicons name="shirt-outline" size={26} color="#000" />
+          <Text style={themedStyles.headerTitle}>ESTADÍSTICAS</Text>
+          <Feather name="more-horizontal" size={26} color="#000" />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#999" />
+        </View>
+      </View>
+    );
+  }
+
+  const colorDistribution = computeColorDistribution(garments);
+  const forgotten = computeForgottenGarments(garments);
+  const totalGarments = garments.length;
+
+  const maxTimesUsed = Math.max(...garments.map((g) => g.times_used || 0), 1);
+  const barHeights = DAYS.map((_, i) => {
+    const dayGarments = garments.filter((g) => {
+      if (!g.last_used_at) return false;
+      const d = g.last_used_at?.toDate?.() || new Date(g.last_used_at);
+      return d.getDay() === (i + 1) % 7;
+    });
+    const count = dayGarments.reduce((s, g) => s + (g.times_used || 0), 0);
+    return Math.max(20, Math.min(160, Math.round((count / Math.max(maxTimesUsed, 1)) * 140) + 20));
+  });
+
   return (
-    <View style={styles.container}>
-      
-      {/* headdd */}
-      <View style={styles.header}>
+    <View style={themedStyles.container}>
+
+      <View style={themedStyles.header}>
         <Ionicons name="shirt-outline" size={26} color="#000" />
-
-        <Text style={styles.headerTitle}>ESTADÍSTICAS</Text>
-
+        <Text style={themedStyles.headerTitle}>ESTADÍSTICAS</Text>
         <Feather name="more-horizontal" size={26} color="#000" />
       </View>
-      
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        
-        {/* cards */}
-        <View style={styles.topCards}>
 
-          {/* barras de estadísticas */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>USO DE PRENDAS</Text>
+        <View style={themedStyles.topCards}>
 
-            <View style={styles.chartContainer}>
+          <View style={themedStyles.card}>
+            <Text style={themedStyles.cardTitle}>USO DE PRENDAS</Text>
 
-              <View style={styles.barGroup}>
-                <View style={[styles.bar, { height: 110 }]} />
-                <Text style={styles.day}>L</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.bar, { height: 80 }]} />
-                <Text style={styles.day}>M</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.bar, { height: 90 }]} />
-                <Text style={styles.day}>M</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.bar, { height: 120 }]} />
-                <Text style={styles.day}>J</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.bar, { height: 150 }]} />
-                <Text style={styles.day}>V</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.barPink, { height: 100 }]} />
-                <Text style={styles.day}>S</Text>
-              </View>
-
-              <View style={styles.barGroup}>
-                <View style={[styles.barPink, { height: 40 }]} />
-                <Text style={styles.day}>D</Text>
-              </View>
-
+            <View style={themedStyles.chartContainer}>
+              {DAYS.map((day, i) => (
+                <View key={day} style={themedStyles.barGroup}>
+                  <View style={[i >= 5 ? themedStyles.barPink : themedStyles.bar, { height: barHeights[i] }]} />
+                  <Text style={themedStyles.day}>{day}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
-          {/* donut de estadística */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              DISTRIBUCIÓN DE COLORES
-            </Text>
+          <View style={themedStyles.card}>
+            <Text style={themedStyles.cardTitle}>DISTRIBUCIÓN DE COLORES</Text>
 
-            <View style={styles.circleContainer}>
-              
-              <View style={styles.circle}>
-                <View style={styles.innerCircle}>
-                  <Text style={styles.totalText}>TOTAL</Text>
-                  <Text style={styles.totalText}>PRENDAS</Text>
-
-                  <Text style={styles.numberText}>120</Text>
+            <View style={themedStyles.circleContainer}>
+              <View style={themedStyles.circle}>
+                <View style={themedStyles.innerCircle}>
+                  <Text style={themedStyles.totalText}>TOTAL</Text>
+                  <Text style={themedStyles.totalText}>PRENDAS</Text>
+                  <Text style={themedStyles.numberText}>{totalGarments}</Text>
                 </View>
               </View>
-
             </View>
 
-            <View style={styles.labels}>
-              <Text style={styles.label}>28% Azul</Text>
-              <Text style={styles.label}>19% Rosa</Text>
-              <Text style={styles.label}>17% Beige</Text>
-              <Text style={styles.label}>10% Mint</Text>
+            <View style={themedStyles.labels}>
+              {colorDistribution.slice(0, 4).map((entry) => (
+                <Text key={entry.name} style={themedStyles.label}>
+                  {entry.pct}% {entry.name}
+                </Text>
+              ))}
             </View>
           </View>
 
         </View>
 
-        {/* prendas olvidadas */}
-        <View style={styles.bottomCard}>
-          <Text style={styles.cardTitle}>
-            PRENDAS OLVIDADAS
-          </Text>
+        <View style={themedStyles.bottomCard}>
+          <Text style={themedStyles.cardTitle}>PRENDAS OLVIDADAS</Text>
+          <Text style={themedStyles.subtitle}>No usados en {'>'} 6 meses</Text>
 
-          <Text style={styles.subtitle}>
-            No usados en &gt; 6 meses
-          </Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.clothesRow}
-          >
-            
-            <View style={styles.clotheCard}>
-              <Image
-                source={{
-                  uri: 'https://via.placeholder.com/80',
-                }}
-                style={styles.clotheImage}
-              />
-            </View>
-
-            <View style={styles.clotheCard}>
-              <Image
-                source={{
-                  uri: 'https://via.placeholder.com/80',
-                }}
-                style={styles.clotheImage}
-              />
-            </View>
-
-            <View style={styles.clotheCard}>
-              <Image
-                source={{
-                  uri: 'https://via.placeholder.com/80',
-                }}
-                style={styles.clotheImage}
-              />
-            </View>
-
-            <View style={styles.clotheCard}>
-              <Image
-                source={{
-                  uri: 'https://via.placeholder.com/80',
-                }}
-                style={styles.clotheImage}
-              />
-            </View>
-
-            <View style={styles.clotheCard}>
-              <Image
-                source={{
-                  uri: 'https://via.placeholder.com/80',
-                }}
-                style={styles.clotheImage}
-              />
-            </View>
-
-          </ScrollView>
+          {forgotten.length === 0 ? (
+            <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 20 }}>
+              ¡Tus prendas están siendo usadas!
+            </Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={themedStyles.clothesRow}
+            >
+              {forgotten.map((g) => (
+                <View key={g.id} style={themedStyles.clotheCard}>
+                  <Image
+                    source={{ uri: g.image_url || 'https://via.placeholder.com/80' }}
+                    style={themedStyles.clotheImage}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
       </ScrollView>
@@ -162,213 +176,184 @@ export default function StatisticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6F2EA',
-    paddingTop: 55,
-  },
+function getStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.statsBg,
+      paddingTop: 55,
+    },
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 25,
-  },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      marginBottom: 25,
+    },
 
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
+    headerTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: colors.text,
+    },
 
-  tabs: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderColor: '#ddd',
-  },
+    tabs: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginBottom: 20,
+      borderBottomWidth: 1,
+      borderColor: colors.statsTabBorder,
+    },
 
-  activeTab: {
-    borderBottomWidth: 2,
-    borderColor: '#B89C87',
-    paddingBottom: 10,
-    width: '50%',
-    alignItems: 'center',
-  },
+    activeTab: {
+      borderBottomWidth: 2,
+      borderColor: colors.statsActiveTabBorder,
+      paddingBottom: 10,
+      width: '50%',
+      alignItems: 'center',
+    },
 
-  activeTabText: {
-    fontWeight: '700',
-    fontSize: 16,
-  },
+    activeTabText: {
+      fontWeight: '700',
+      fontSize: 16,
+      color: colors.text,
+    },
 
-  tabText: {
-    color: '#999',
-    fontSize: 16,
-    paddingTop: 2,
-  },
+    tabText: {
+      color: colors.statsTabText,
+      fontSize: 16,
+      paddingTop: 2,
+    },
 
-  topCards: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-  },
+    topCards: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
+    },
 
-  card: {
-    backgroundColor: '#fff',
-    width: '48%',
-    borderRadius: 25,
-    padding: 15,
-    elevation: 2,
-  },
+    card: {
+      backgroundColor: colors.statsCard,
+      width: '48%',
+      borderRadius: 25,
+      padding: 15,
+      elevation: 2,
+    },
 
-  cardTitle: {
-    textAlign: 'center',
-    fontWeight: '700',
-    fontSize: 16,
-    marginBottom: 5,
-  },
+    cardTitle: {
+      textAlign: 'center',
+      fontWeight: '700',
+      fontSize: 16,
+      marginBottom: 5,
+      color: colors.text,
+    },
 
-  subtitle: {
-    textAlign: 'center',
-    color: '#555',
-    marginBottom: 15,
-  },
+    subtitle: {
+      textAlign: 'center',
+      color: colors.statsSubtitle,
+      marginBottom: 15,
+    },
 
-  chartContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 180,
-    marginTop: 10,
-  },
+    chartContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
+      height: 180,
+      marginTop: 10,
+    },
 
-  barGroup: {
-    alignItems: 'center',
-  },
+    barGroup: {
+      alignItems: 'center',
+    },
 
-  bar: {
-    width: 18,
-    backgroundColor: '#5A8CCB',
-    borderRadius: 10,
-  },
+    bar: {
+      width: 18,
+      backgroundColor: colors.statsBarColor,
+      borderRadius: 10,
+    },
 
-  barPink: {
-    width: 18,
-    backgroundColor: '#E8A8A8',
-    borderRadius: 10,
-  },
+    barPink: {
+      width: 18,
+      backgroundColor: colors.statsBarPink,
+      borderRadius: 10,
+    },
 
-  day: {
-    marginTop: 8,
-    fontSize: 12,
-  },
+    day: {
+      marginTop: 8,
+      fontSize: 12,
+      color: colors.textTertiary,
+    },
 
-  circleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
+    circleContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 10,
+    },
 
-  circle: {
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: '#C7D9EF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    circle: {
+      width: 170,
+      height: 170,
+      borderRadius: 85,
+      backgroundColor: colors.statsCircle,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
 
-  innerCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    innerCircle: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.statsCircleInner,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
 
-  totalText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+    totalText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.text,
+    },
 
-  numberText: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
+    numberText: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: colors.text,
+    },
 
-  labels: {
-    marginTop: 15,
-    gap: 4,
-  },
+    labels: {
+      marginTop: 15,
+      gap: 4,
+    },
 
-  label: {
-    fontSize: 12,
-    color: '#555',
-  },
+    label: {
+      fontSize: 12,
+      color: colors.statsLabel,
+    },
 
-  bottomCard: {
-    backgroundColor: '#fff',
-    margin: 15,
-    borderRadius: 25,
-    padding: 18,
-    elevation: 2,
-    marginBottom: 100,
-  },
+    bottomCard: {
+      backgroundColor: colors.statsCard,
+      margin: 15,
+      borderRadius: 25,
+      padding: 18,
+      elevation: 2,
+      marginBottom: 100,
+    },
 
-  clothesRow: {
-    marginTop: 10,
-    gap: 12,
-  },
+    clothesRow: {
+      marginTop: 10,
+      gap: 12,
+    },
 
-  clotheCard: {
-    backgroundColor: '#F7F3ED',
-    borderRadius: 18,
-    padding: 10,
-  },
+    clotheCard: {
+      backgroundColor: colors.statsForgottenCard,
+      borderRadius: 18,
+      padding: 10,
+    },
 
-  clotheImage: {
-    width: 70,
-    height: 90,
-    borderRadius: 12,
-  },
-
-  navbar: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    height: 85,
-    backgroundColor: '#fff',
-    borderTopWidth: 0.5,
-    borderColor: '#ddd',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-
-  navItem: {
-    alignItems: 'center',
-  },
-
-  activeNavItem: {
-    alignItems: 'center',
-    backgroundColor: '#DDE6F6',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-  },
-
-  navText: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 3,
-  },
-
-  activeNavText: {
-    fontSize: 11,
-    marginTop: 3,
-    fontWeight: '600',
-  },
-});
+    clotheImage: {
+      width: 70,
+      height: 90,
+      borderRadius: 12,
+    },
+  });
+}

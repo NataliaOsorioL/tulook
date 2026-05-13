@@ -1,267 +1,636 @@
-import { View,Text,StyleSheet,Image,TouchableOpacity,ScrollView } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
-const clothes = [
-  {
-    id: 1,
-    image: 'https://via.placeholder.com/80',
-  },
-  {
-    id: 2,
-    image: 'https://via.placeholder.com/80',
-  },
-  {
-    id: 3,
-    image: 'https://via.placeholder.com/80',
-  },
-  {
-    id: 4,
-    image: 'https://via.placeholder.com/80',
-  },
-  {
-    id: 5,
-    image: 'https://via.placeholder.com/80',
-  },
-  {
-    id: 6,
-    image: 'https://via.placeholder.com/80',
-  },
-];
+import { useGarments } from '../src/hooks/useGarments';
+import { ensureSignedIn } from '../src/services/auth.service';
+import { saveOutfitManually, getRecentOutfitGarmentIds } from '../src/services/outfit.service';
+import {
+  GARMENT_CATEGORIES,
+  GARMENT_CATEGORIES_LABELS,
+} from '../src/utils/constants';
+import { CATEGORY_ORDER, selectDailyOutfitGarments, canGenerateOutfit, validateOutfit, validateOutfitComposition, validateSelection, translateOutfitError } from '../src/utils/outfit-generator-v2';
+import { useTheme } from '../src/context/ThemeContext';
 
-export default function CreateOutfitScreen() {
+function renderGarmentImage(garment, textStyle, imageStyle) {
+  if (garment.emoji) {
+    return <Text style={textStyle}>{garment.emoji}</Text>;
+  }
+  if (garment.image_url) {
+    return <Image source={{ uri: garment.image_url }} style={imageStyle || textStyle} />;
+  }
+  return <Ionicons name="shirt-outline" size={textStyle.fontSize || 24} color="#CCC" />;
+}
+
+function PreviewSection({ garmentsByCategory, selectedById, styles: s }) {
   return (
-    <View style={styles.container}>
-      
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Ionicons name="shirt-outline" size={28} color="#000" />
-        <Text style={styles.headerTitle}>CREAR OUTFIT</Text>
-        <View style={{ width: 28 }} />
+    <View style={s.previewContainer}>
+      <View style={s.previewCard}>
+        {CATEGORY_ORDER.map((key) => {
+          const id = selectedById[key];
+          const garment = id ? (garmentsByCategory[key] || []).find((g) => g.id === id) : null;
+          if (!garment) return null;
+
+          const isLarge = key === GARMENT_CATEGORIES.DRESS || key === GARMENT_CATEGORIES.TOP || key === GARMENT_CATEGORIES.BOTTOM;
+
+          return (
+            <View key={key} style={isLarge ? s.previewItem : s.previewItemSmall}>
+              <Text style={s.previewLabel}>{GARMENT_CATEGORIES_LABELS[key]}</Text>
+              {renderGarmentImage(
+                garment,
+                isLarge ? { fontSize: 56 } : { fontSize: 40 },
+                isLarge ? s.previewImageMain : s.previewImageSmall,
+              )}
+            </View>
+          );
+        })}
       </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        
-        {/* PREVIEW */}
-        <View style={styles.previewContainer}>
-          <View style={styles.previewCard}>
-            
-            <Image
-              source={{
-                uri: 'https://via.placeholder.com/220x350',
-              }}
-              style={styles.mainClothe}
-            />
-
-            <Image
-              source={{
-                uri: 'https://via.placeholder.com/80',
-              }}
-              style={styles.shoes}
-            />
-
-          </View>
-        </View>
-
-        {/* CATEGORIES */}
-        <View style={styles.categories}>
-          <TouchableOpacity style={styles.activeCategory}>
-            <Text style={styles.activeText}>Parte Superior</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity>
-            <Text style={styles.categoryText}>Parte Inferior</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity>
-            <Text style={styles.categoryText}>Calzado</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity>
-            <Text style={styles.categoryText}>Accesorios</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* CLOTHES LIST */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.clothesRow}
-        >
-          {clothes.map((item, index) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.clotheCard,
-                index === 0 && styles.selectedCard,
-              ]}
-            >
-              <Image
-                source={{ uri: item.image }}
-                style={styles.clotheImage}
-              />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <TouchableOpacity style={styles.saveButton}>
-          <Text style={styles.saveText}>GUARDAR OUTFIT</Text>
-
-          <Feather name="shopping-bag" size={26} color="#fff" />
-        </TouchableOpacity>
-
-      </ScrollView>
-
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6F2EA',
-    paddingTop: 55,
-  },
+function CategoryTabs({ selectedCategory, onSelect, conflictingCategories, styles: s }) {
+  return (
+    <View style={s.categories}>
+      {CATEGORY_ORDER.map((key) => {
+        const isActive = selectedCategory === key;
+        const isConflicting = conflictingCategories?.has(key);
+        return (
+          <TouchableOpacity
+            key={key}
+            style={[isActive ? s.activeCategory : undefined, isConflicting && s.conflictingTab]}
+            onPress={() => onSelect(key)}
+          >
+            <Text style={[isActive ? s.activeText : s.categoryText, isConflicting && s.conflictingTabText]}>
+              {GARMENT_CATEGORIES_LABELS[key]}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 25,
-  },
+function GarmentList({ garments, selectedId, onSelect, styles: s }) {
+  if (garments.length === 0) {
+    return (
+      <View style={{ paddingHorizontal: 20, paddingVertical: 30 }}>
+        <Text style={{ color: '#999' }}>No hay prendas en esta categoría</Text>
+      </View>
+    );
+  }
 
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.clothesRow}>
+      {garments.map((item) => {
+        const isSelected = selectedId === item.id;
+        return (
+          <TouchableOpacity
+            key={item.id}
+            style={[s.clotheCard, isSelected && s.selectedCard]}
+            onPress={() => onSelect(item.id)}
+          >
+            {renderGarmentImage(item, s.clotheImageEmoji, s.clotheImage)}
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
-  previewContainer: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: '#C9B8AA',
-    marginHorizontal: 20,
-    borderRadius: 25,
-    padding: 18,
-  },
+export default function CreateOutfitScreen() {
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
 
-  previewCard: {
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    height: 420,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
+  const { garmentsByCategory, allGarments, isLoading, error: loadError } = useGarments();
+  console.log('[Outfit] Render — isLoading:', isLoading, 'garments:', allGarments?.length);
 
-  mainClothe: {
-    width: 220,
-    height: 320,
-    resizeMode: 'contain',
-  },
+  const [selectedCategory, setSelectedCategory] = useState(GARMENT_CATEGORIES.TOP);
+  const [selectedById, setSelectedById] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [hasAutoGenerated, setHasAutoGenerated] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  shoes: {
-    width: 80,
-    height: 80,
-    position: 'absolute',
-    left: 15,
-    bottom: 20,
-    borderRadius: 12,
-  },
+  const lastModeRef = useRef(null);
 
-  categories: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginTop: 25,
-    paddingHorizontal: 10,
-  },
+  // Diagnostic log — runs only after state is fully declared and data is loaded
+  if (allGarments?.length > 0 && !isLoading) {
+    const counts = {};
+    for (const cat of CATEGORY_ORDER) {
+      counts[cat] = (garmentsByCategory[cat] || []).length;
+    }
+    console.log('[Outfit] garmentsByCategory counts:', JSON.stringify(counts), '| selectedById keys:', Object.keys(selectedById));
+  }
 
-  activeCategory: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 20,
-    elevation: 2,
-  },
+  // Global validation gate — runs only after data is loaded and initial state is built
+  const outfitValidation = useMemo(
+    () => {
+      if (isLoading || !isInitialized) return { valid: true, errors: [] };
+      return validateSelection(selectedById, garmentsByCategory);
+    },
+    [selectedById, garmentsByCategory, isLoading, isInitialized],
+  );
 
-  activeText: {
-    fontWeight: '600',
-  },
+  // Categories incompatible with the current selection (visually hinted, not blocked)
+  const conflictingCategories = useMemo(() => {
+    const conflicting = new Set();
+    if (selectedById[GARMENT_CATEGORIES.DRESS]) {
+      conflicting.add(GARMENT_CATEGORIES.TOP);
+      conflicting.add(GARMENT_CATEGORIES.BOTTOM);
+    }
+    if (selectedById[GARMENT_CATEGORIES.TOP] || selectedById[GARMENT_CATEGORIES.BOTTOM]) {
+      conflicting.add(GARMENT_CATEGORIES.DRESS);
+    }
+    return conflicting;
+  }, [selectedById]);
 
-  categoryText: {
-    fontWeight: '500',
-  },
+  useEffect(() => {
+    if (isLoading || isInitialized) return;
+    const init = {};
+    for (const cat of CATEGORY_ORDER) {
+      const list = garmentsByCategory[cat] || [];
+      if (list.length > 0) init[cat] = list[0].id;
+    }
+    // Avoid mixing DRESS with TOP/BOTTOM — prefer top+bottom when possible
+    if (init[GARMENT_CATEGORIES.DRESS]) {
+      if (init[GARMENT_CATEGORIES.TOP] && init[GARMENT_CATEGORIES.BOTTOM]) {
+        delete init[GARMENT_CATEGORIES.DRESS];
+      } else if (init[GARMENT_CATEGORIES.TOP] || init[GARMENT_CATEGORIES.BOTTOM]) {
+        delete init[GARMENT_CATEGORIES.TOP];
+        delete init[GARMENT_CATEGORIES.BOTTOM];
+      }
+    }
+    console.log('[Outfit] Initial selection built:', Object.keys(init));
+    setSelectedById(init);
+    setValidationErrors([]);
+    setHasAutoGenerated(false);
+    lastModeRef.current = null;
+    setIsInitialized(true);
+  }, [isLoading, garmentsByCategory, isInitialized]);
 
-  clothesRow: {
-    paddingHorizontal: 15,
-    paddingTop: 20,
-    gap: 12,
-  },
+  // Cleanup effect: remove orphan garment references from selectedById when garments are deleted
+  useEffect(() => {
+    if (isLoading || !isInitialized) return;
+    const validIds = new Set();
+    for (const cat of CATEGORY_ORDER) {
+      for (const g of (garmentsByCategory[cat] || [])) {
+        validIds.add(g.id);
+      }
+    }
+    setSelectedById((prev) => {
+      const cleaned = { ...prev };
+      let changed = false;
+      for (const [cat, id] of Object.entries(cleaned)) {
+        if (id && !validIds.has(id)) {
+          console.log('[Outfit] Cleaning orphan reference:', cat, '=', id);
+          delete cleaned[cat];
+          changed = true;
+        }
+      }
+      return changed ? cleaned : prev;
+    });
+  }, [isLoading, isInitialized, garmentsByCategory]);
 
-  clotheCard: {
-    width: 70,
-    height: 90,
-    borderRadius: 15,
-    backgroundColor: '#DDE7F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  const handleCategorySelect = useCallback((key) => {
+    setSelectedCategory(key);
+  }, []);
 
-  selectedCard: {
-    borderWidth: 2,
-    borderColor: '#000',
-  },
+  const handleGarmentSelect = useCallback((garmentId) => {
+    setSelectedById((prev) => {
+      const next = { ...prev, [selectedCategory]: garmentId };
+      // Auto-clean: selecting DRESS removes TOP/BOTTOM
+      if (selectedCategory === GARMENT_CATEGORIES.DRESS) {
+        delete next[GARMENT_CATEGORIES.TOP];
+        delete next[GARMENT_CATEGORIES.BOTTOM];
+      }
+      // Auto-clean: selecting TOP or BOTTOM removes DRESS
+      if (selectedCategory === GARMENT_CATEGORIES.TOP || selectedCategory === GARMENT_CATEGORIES.BOTTOM) {
+        delete next[GARMENT_CATEGORIES.DRESS];
+      }
+      return next;
+    });
+    setValidationErrors([]);
+  }, [selectedCategory]);
 
-  clotheImage: {
-    width: 55,
-    height: 70,
-    borderRadius: 10,
-  },
+  const buildSelectionList = useCallback(() => {
+    const list = [];
+    for (const cat of CATEGORY_ORDER) {
+      const id = selectedById[cat];
+      if (id) {
+        const g = (garmentsByCategory[cat] || []).find((x) => x.id === id);
+        if (g) list.push(g);
+      }
+    }
+    return list;
+  }, [selectedById, garmentsByCategory]);
 
-  saveButton: {
-    marginHorizontal: 25,
-    marginTop: 30,
-    marginBottom: 30,
-    borderRadius: 35,
-    height: 70,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 15,
+  const handleAutoGenerate = useCallback(async () => {
+    try {
+      setIsGenerating(true);
+      setValidationErrors([]);
 
-    backgroundColor: '#C9DCE8',
-  },
+      // STEP 1: Validate inventory has all required categories
+      const preCheck = canGenerateOutfit(allGarments);
+      if (!preCheck.allowed) {
+        console.log('[Outfit] Pre-generation validation failed:', preCheck.reason);
+        Alert.alert('No se pudo generar', translateOutfitError(preCheck.reason));
+        return;
+      }
 
-  saveText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '700',
-  },
+      const userId = await ensureSignedIn();
 
-  navbar: {
-    height: 85,
-    backgroundColor: '#fff',
-    borderTopWidth: 0.5,
-    borderColor: '#ddd',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
+      const recentIds = new Set();
+      try {
+        const ids = await getRecentOutfitGarmentIds(userId);
+        ids.forEach((id) => recentIds.add(id));
+      } catch { /* non-critical */ }
 
-  navItem: {
-    alignItems: 'center',
-  },
+      // Exclude currently selected garments so the next generation picks something different
+      const excludeIds = new Set(Object.values(selectedById).filter(Boolean));
+      console.log('[Outfit] Generating with categories:', {
+        total: allGarments.length,
+        excludeCount: excludeIds.size,
+      });
 
-  navText: {
-    fontSize: 11,
-    marginTop: 4,
-    color: '#8E8E93',
-  },
+      // STEP 2: Decide preferred mode to avoid repeating the same type
+      let preferredMode = 'auto';
+      if (lastModeRef.current === 'dress') {
+        preferredMode = 'top-bottom';
+        console.log('[Outfit] Last was dress → trying top-bottom');
+      } else if (lastModeRef.current === 'top-bottom') {
+        preferredMode = 'dress';
+        console.log('[Outfit] Last was top-bottom → trying dress');
+      }
 
-  activeNav: {
-    fontSize: 11,
-    marginTop: 4,
-    color: '#000',
-    fontWeight: '600',
-  },
-});
+      // STEP 3: Generate the combination
+      let result = selectDailyOutfitGarments(allGarments, recentIds, null, excludeIds, preferredMode);
+      console.log('[Outfit] Generated result:', result.garments.map((g) => ({ id: g.garment_id, cat: g.category_used })), '| mode:', result.outfitMode);
+
+      // STEP 4: Post-generation validation — ensure the result is complete and valid
+      let postCheck = validateOutfit(result);
+      if (!postCheck.valid) {
+        console.log('[Outfit] First attempt failed:', postCheck.errors);
+        // Retry once with the opposite mode (random jitter may yield different results)
+        const retryMode = preferredMode === 'dress' ? 'top-bottom' : preferredMode === 'top-bottom' ? 'dress' : null;
+        if (retryMode) {
+          console.log('[Outfit] Retrying with mode:', retryMode);
+          result = selectDailyOutfitGarments(allGarments, recentIds, null, excludeIds, retryMode);
+          postCheck = validateOutfit(result);
+        }
+      }
+      if (!postCheck.valid) {
+        console.log('[Outfit] All attempts failed:', postCheck.errors);
+        const rawMsg = result.garments.length === 0 ? result.description : postCheck.errors[0];
+        Alert.alert('No se pudo generar', translateOutfitError(rawMsg));
+        return;
+      }
+
+      // STEP 5: Update state with the valid outfit
+      const newSelection = {};
+      for (const item of result.garments) {
+        newSelection[item.category_used] = item.garment_id;
+      }
+      console.log('[Outfit] Valid outfit selected:', newSelection, '| mode:', result.outfitMode);
+      lastModeRef.current = result.outfitMode;
+      setSelectedById(newSelection);
+      setHasAutoGenerated(true);
+    } catch (err) {
+      console.warn('[Outfit] Auto-generate error:', err.message);
+      Alert.alert('Error', 'No se pudo generar el outfit automático.');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [allGarments, selectedById]);
+
+  const handleSave = useCallback(async () => {
+    const list = buildSelectionList();
+    const validation = validateOutfitComposition(list);
+
+    if (!validation.valid) {
+      setValidationErrors(validation.errors);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setValidationErrors([]);
+      const userId = await ensureSignedIn();
+      const names = list.map((g) => g.name || g.emoji || 'Prenda').join(' + ');
+      const result = await saveOutfitManually(userId, list, names);
+      if (result.success) {
+        Alert.alert('Guardado', `Outfit guardado: "${result.outfit.name}"`);
+      }
+    } catch (err) {
+      console.warn('[Outfit] Save error:', err.message);
+      Alert.alert('Error', 'No se pudo guardar el outfit.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [buildSelectionList]);
+
+  const currentGarments = garmentsByCategory[selectedCategory] || [];
+  const selectedId = selectedById[selectedCategory];
+
+  // --------- Loading state ----------
+  if (isLoading || !isInitialized) {
+    return (
+      <View style={s.container}>
+        <View style={s.header}>
+          <Ionicons name="shirt-outline" size={28} color="#000" />
+          <Text style={s.headerTitle}>CREAR OUTFIT</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#999" />
+        </View>
+      </View>
+    );
+  }
+
+  // --------- Error state ----------
+  if (loadError) {
+    return (
+      <View style={s.container}>
+        <View style={s.header}>
+          <Ionicons name="shirt-outline" size={28} color="#000" />
+          <Text style={s.headerTitle}>CREAR OUTFIT</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
+          <Ionicons name="cloud-offline-outline" size={60} color="#DDD" />
+          <Text style={{ color: colors.outfitEmptyText, marginTop: 12, textAlign: 'center' }}>
+            Error al cargar prendas. Tira para recargar.
+          </Text>
+          <TouchableOpacity onPress={() => {}} style={{ marginTop: 16 }}>
+            <Text style={{ color: '#5A8CCB', fontWeight: '600' }}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // --------- Empty state ----------
+  const hasAnyGarments = CATEGORY_ORDER.some((cat) => (garmentsByCategory[cat] || []).length > 0);
+  if (!hasAnyGarments) {
+    return (
+      <View style={s.container}>
+        <View style={s.header}>
+          <Ionicons name="shirt-outline" size={28} color="#000" />
+          <Text style={s.headerTitle}>CREAR OUTFIT</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={s.emptyContainer}>
+          <Ionicons name="shirt-outline" size={60} color="#DDD" />
+          <Text style={s.emptyText}>Aún no tienes prendas</Text>
+          <Text style={s.emptySubtext}>Agrega prendas desde la pestaña Inventario</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // --------- Main UI ----------
+  return (
+    <View style={s.container}>
+      <View style={s.header}>
+        <Ionicons name="shirt-outline" size={28} color="#000" />
+        <Text style={s.headerTitle}>CREAR OUTFIT</Text>
+        <View style={{ width: 28 }} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <PreviewSection garmentsByCategory={garmentsByCategory} selectedById={selectedById} styles={s} />
+
+        <CategoryTabs selectedCategory={selectedCategory} onSelect={handleCategorySelect} conflictingCategories={conflictingCategories} styles={s} />
+
+        <GarmentList
+          garments={currentGarments}
+          selectedId={selectedId}
+          onSelect={handleGarmentSelect}
+          styles={s}
+        />
+
+        {validationErrors.length > 0 && (
+          <View style={s.errorContainer}>
+            {validationErrors.map((err, i) => (
+              <Text key={i} style={s.errorText}>⚠ {translateOutfitError(err)}</Text>
+            ))}
+          </View>
+        )}
+
+        <View style={s.buttonRow}>
+          <TouchableOpacity
+            style={[s.autoButton, isGenerating && { opacity: 0.6 }]}
+            onPress={handleAutoGenerate}
+            disabled={isGenerating}
+          >
+            <Ionicons name="sparkles" size={20} color="#FFF" />
+            <Text style={s.autoButtonText}>
+              {isGenerating ? 'GENERANDO...' : hasAutoGenerated ? 'Regenerar' : 'Generar Automático'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.saveButton, isSaving && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            <Text style={s.saveText}>{isSaving ? 'GUARDANDO...' : 'GUARDAR'}</Text>
+            <Feather name="shopping-bag" size={22} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function getStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.outfitBg,
+      paddingTop: 55,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      marginBottom: 25,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingTop: 100,
+    },
+    emptyText: {
+      fontSize: 16,
+      color: colors.outfitEmptyText,
+      marginTop: 16,
+      fontWeight: '600',
+    },
+    emptySubtext: {
+      fontSize: 13,
+      color: colors.textTertiary,
+      marginTop: 4,
+      textAlign: 'center',
+      paddingHorizontal: 40,
+    },
+    errorContainer: {
+      marginHorizontal: 25,
+      marginTop: 16,
+      padding: 14,
+      borderRadius: 12,
+      backgroundColor: '#FDE8E8',
+    },
+    errorText: {
+      fontSize: 13,
+      color: '#C0392B',
+      marginBottom: 4,
+      lineHeight: 20,
+    },
+    previewContainer: {
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: colors.outfitPreviewBorder,
+      marginHorizontal: 20,
+      borderRadius: 25,
+      padding: 18,
+    },
+    previewCard: {
+      backgroundColor: colors.outfitPreviewCard,
+      borderRadius: 25,
+      padding: 20,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      gap: 12,
+    },
+    previewItem: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '45%',
+    },
+    previewItemSmall: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '45%',
+    },
+    previewLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 4,
+    },
+    previewImageMain: {
+      width: 70,
+      height: 90,
+      borderRadius: 10,
+    },
+    previewImageSmall: {
+      width: 55,
+      height: 70,
+      borderRadius: 10,
+    },
+    categories: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      marginTop: 25,
+      paddingHorizontal: 10,
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    activeCategory: {
+      backgroundColor: colors.outfitActiveCategory,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 20,
+      elevation: 2,
+    },
+    activeText: {
+      fontWeight: '600',
+      color: colors.outfitCategoryText,
+      fontSize: 13,
+    },
+    categoryText: {
+      fontWeight: '500',
+      color: colors.outfitCategoryText,
+      fontSize: 13,
+    },
+    conflictingTab: {
+      opacity: 0.35,
+    },
+    conflictingTabText: {
+      opacity: 0.35,
+    },
+    clothesRow: {
+      paddingHorizontal: 15,
+      paddingTop: 20,
+      gap: 12,
+    },
+    clotheCard: {
+      width: 70,
+      height: 90,
+      borderRadius: 15,
+      backgroundColor: colors.outfitCardBg,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    selectedCard: {
+      borderWidth: 2,
+      borderColor: colors.outfitSelectedBorder,
+    },
+    clotheImageEmoji: {
+      fontSize: 36,
+    },
+    clotheImage: {
+      width: 55,
+      height: 70,
+      borderRadius: 10,
+    },
+    buttonRow: {
+      flexDirection: 'column',
+      gap: 12,
+      marginHorizontal: 25,
+      marginTop: 24,
+      marginBottom: 30,
+    },
+    autoButton: {
+      borderRadius: 35,
+      height: 56,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: '#5A8CCB',
+    },
+    autoButtonText: {
+      color: '#FFF',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    saveButton: {
+      borderRadius: 35,
+      height: 56,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.outfitSaveBg,
+    },
+    saveText: {
+      color: colors.outfitSaveText,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+  });
+}
