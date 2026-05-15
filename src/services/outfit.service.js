@@ -95,6 +95,80 @@ export async function getOutfitWithGarments(outfitId) {
   };
 }
 
+export async function getAllUserOutfits(userId) {
+  let outfits;
+  try {
+    const q = query(
+      collection(db, FIRESTORE_COLLECTIONS.OUTFITS),
+      where('user_id', '==', userId),
+      orderBy('created_at', 'desc'),
+    );
+    const snapshot = await getDocs(q);
+    outfits = snapshotToArray(snapshot);
+  } catch {
+    // Fallback if composite index missing: query without orderBy and sort in memory
+    const q = query(
+      collection(db, FIRESTORE_COLLECTIONS.OUTFITS),
+      where('user_id', '==', userId),
+    );
+    const snapshot = await getDocs(q);
+    outfits = snapshotToArray(snapshot);
+    outfits.sort((a, b) => {
+      const aTime = a.created_at?.toMillis?.() || a.created_at || 0;
+      const bTime = b.created_at?.toMillis?.() || b.created_at || 0;
+      return bTime - aTime;
+    });
+  }
+
+  if (outfits.length === 0) return [];
+
+  // Load outfit_garments for all outfits
+  const outfitIds = outfits.map((o) => o.id);
+  const ogMap = {};
+
+  for (let i = 0; i < outfitIds.length; i += 10) {
+    const chunk = outfitIds.slice(i, i + 10);
+    const ogQuery = query(
+      collection(db, FIRESTORE_COLLECTIONS.OUTFIT_GARMENTS),
+      where('outfit_id', 'in', chunk),
+      orderBy('position', 'asc'),
+    );
+    const ogSnapshot = await getDocs(ogQuery);
+    snapshotToArray(ogSnapshot).forEach((og) => {
+      if (!ogMap[og.outfit_id]) ogMap[og.outfit_id] = [];
+      ogMap[og.outfit_id].push(og);
+    });
+  }
+
+  // Collect all garment IDs
+  const allGarmentIds = [...new Set(
+    Object.values(ogMap).flat().map((og) => og.garment_id),
+  )];
+
+  // Load garments in batches
+  const garments = [];
+  for (let i = 0; i < allGarmentIds.length; i += 30) {
+    const chunk = allGarmentIds.slice(i, i + 30);
+    const g = await getGarmentsByIds(chunk);
+    garments.push(...g);
+  }
+  const garmentMap = new Map(garments.map((g) => [g.id, g]));
+
+  // Build enriched outfits
+  return outfits.map((outfit) => {
+    const ogRecords = ogMap[outfit.id] || [];
+    const orderedGarments = ogRecords
+      .map((og) => garmentMap.get(og.garment_id))
+      .filter(Boolean);
+    return {
+      ...outfit,
+      garment_ids: ogRecords.map((og) => og.garment_id),
+      outfit_garments: ogRecords,
+      garments: orderedGarments,
+    };
+  });
+}
+
 export async function generateAndSaveDailyOutfit(userId, weatherData = null) {
   const date = todayString();
   const allGarments = await getGarmentsByUser(userId);
@@ -284,4 +358,29 @@ export async function deleteAllUserOutfits(userId) {
   }
 
   return { outfitsDeleted: outfitIds.length };
+}
+
+export async function deleteSingleOutfit(outfitId) {
+  const batch = writeBatch(db);
+
+  batch.delete(doc(db, FIRESTORE_COLLECTIONS.OUTFITS, outfitId));
+
+  // Delete outfit_garments for this outfit
+  const ogQuery = query(
+    collection(db, FIRESTORE_COLLECTIONS.OUTFIT_GARMENTS),
+    where('outfit_id', '==', outfitId),
+  );
+  const ogSnapshot = await getDocs(ogQuery);
+  ogSnapshot.docs.forEach((d) => batch.delete(d.ref));
+
+  // Delete daily_outfits referencing this outfit
+  const dailyQuery = query(
+    collection(db, FIRESTORE_COLLECTIONS.DAILY_OUTFITS),
+    where('outfit_id', '==', outfitId),
+  );
+  const dailySnapshot = await getDocs(dailyQuery);
+  dailySnapshot.docs.forEach((d) => batch.delete(d.ref));
+
+  await batch.commit();
+  return { success: true, outfitId };
 }

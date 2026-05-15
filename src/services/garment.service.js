@@ -3,6 +3,7 @@ import {
   deleteDoc, writeBatch, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { logger } from '../utils/logger';
 import { FIRESTORE_COLLECTIONS } from '../utils/constants';
 import { uploadImageToGitHub, deleteImageFromGitHub } from './github.service';
 
@@ -42,10 +43,12 @@ export async function createGarment(userId, data) {
   const now = new Date();
   const garmentData = {
     user_id: userId,
-    name: data.name,
+    name: data.name || 'Prenda',
     category: data.category,
+    subtype: data.subtype || null,
     color_hex: data.color_hex || '#CCC',
     color_name: data.color_name || null,
+    notes: data.notes || null,
     size: data.size || null,
     quantity: data.quantity || 1,
     image_url: data.image_url || null,
@@ -101,12 +104,14 @@ export async function uploadGarmentImage(userId, localUri) {
   };
 }
 
-export async function createGarmentFromEmoji(userId, emoji, category) {
+export async function createGarmentFromEmoji(userId, emoji, category, color_hex = '#CCC', subtype = null, notes = null) {
   return createGarment(userId, {
     name: emoji,
     category,
-    color_hex: '#CCC',
+    subtype,
+    color_hex,
     color_name: null,
+    notes,
     image_url: null,
     quantity: 1,
     is_favorite: false,
@@ -122,18 +127,26 @@ export async function createGarmentFromEmoji(userId, emoji, category) {
 export async function deleteGarment(garmentId) {
   const ref = doc(db, FIRESTORE_COLLECTIONS.GARMENTS, garmentId);
 
-  // Try to get garment data for GitHub image cleanup
+  let snap;
   try {
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data.github_path && data.github_sha) {
-        deleteImageFromGitHub(data.github_path, data.github_sha).catch(() => {});
-      }
-    }
-  } catch { /* non-critical */ }
+    snap = await getDoc(ref);
+  } catch (err) {
+    throw new Error(`Error al leer prenda (${garmentId}): ${err.message}`);
+  }
 
-  await deleteDoc(ref);
+  if (snap.exists()) {
+    const data = snap.data();
+    if (data.github_path && data.github_sha) {
+      deleteImageFromGitHub(data.github_path, data.github_sha).catch(() => {});
+    }
+  }
+
+  try {
+    await deleteDoc(ref);
+    logger.debug(`[GarmentService] Prenda eliminada: ${garmentId}`);
+  } catch (err) {
+    throw new Error(`Error al eliminar prenda (${garmentId}): ${err.message}`);
+  }
 }
 
 /**
@@ -141,9 +154,15 @@ export async function deleteGarment(garmentId) {
  * Handles batch limits (Firestore max 500 per batch).
  */
 export async function deleteAllGarments(userId) {
-  // Get all garments
-  const garments = await getGarmentsByUser(userId);
+  let garments;
+  try {
+    garments = await getGarmentsByUser(userId);
+  } catch (err) {
+    throw new Error(`Error al leer prendas: ${err.message}`);
+  }
+
   const garmentIds = garments.map((g) => g.id);
+  if (garmentIds.length === 0) return 0;
 
   // Best-effort GitHub image cleanup (non-blocking)
   for (const g of garments) {
@@ -153,13 +172,18 @@ export async function deleteAllGarments(userId) {
   }
 
   // Batch delete garments (500 per batch)
-  for (let i = 0; i < garmentIds.length; i += 500) {
-    const batch = writeBatch(db);
-    const chunk = garmentIds.slice(i, i + 500);
-    for (const id of chunk) {
-      batch.delete(doc(db, FIRESTORE_COLLECTIONS.GARMENTS, id));
+  try {
+    for (let i = 0; i < garmentIds.length; i += 500) {
+      const batch = writeBatch(db);
+      const chunk = garmentIds.slice(i, i + 500);
+      for (const id of chunk) {
+        batch.delete(doc(db, FIRESTORE_COLLECTIONS.GARMENTS, id));
+      }
+      await batch.commit();
     }
-    await batch.commit();
+    logger.debug(`[GarmentService] Eliminadas ${garmentIds.length} prendas`);
+  } catch (err) {
+    throw new Error(`Error al eliminar prendas en lote: ${err.message}`);
   }
 
   return garmentIds.length;

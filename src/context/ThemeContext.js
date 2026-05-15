@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { Appearance } from 'react-native';
 import { getUserProfile, updateUserProfile } from '../services/user.service';
 import { ensureSignedIn } from '../services/auth.service';
 import { lightColors, darkColors } from './themes';
@@ -6,14 +7,28 @@ import { lightColors, darkColors } from './themes';
 const ThemeContext = createContext();
 
 function getSystemTheme() {
-  if (typeof window !== 'undefined' && window.matchMedia) {
+  if (typeof window?.matchMedia === 'function') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
-  return 'light';
+  const scheme = Appearance.getColorScheme();
+  return scheme === 'dark' ? 'dark' : 'light';
+}
+
+function listenToSystemTheme(handler) {
+  if (typeof window?.matchMedia === 'function') {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }
+  const sub = Appearance.addChangeListener(({ colorScheme }) => {
+    handler({ matches: colorScheme === 'dark' });
+  });
+  return () => sub.remove();
 }
 
 export function ThemeProvider({ children }) {
   const [themeMode, setThemeModeState] = useState('light');
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -28,12 +43,9 @@ export function ThemeProvider({ children }) {
       }
     })();
 
-    const mq = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      if (themeMode === 'auto') setThemeModeState('auto');
-    };
-    if (mq) mq.addEventListener('change', handler);
-    return () => { if (mq) mq.removeEventListener('change', handler); };
+    return listenToSystemTheme(() => {
+      setTick((t) => t + 1);
+    });
   }, []);
 
   const setThemeMode = useCallback(async (newMode) => {

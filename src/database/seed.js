@@ -1,4 +1,5 @@
 import { getGarmentsByUser, createGarment } from '../services/garment.service';
+import { logger } from '../utils/logger';
 import { GARMENT_CATEGORIES, SEASON_TAGS, FIRESTORE_COLLECTIONS } from '../utils/constants';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -109,24 +110,24 @@ export async function hasExistingGarments(userId) {
 export async function seedForUser(userId, userName = 'Nati') {
   const alreadySeeded = await hasExistingGarments(userId);
   if (alreadySeeded) {
-    console.log(`[Seed] Usuario ${userId} ya tiene prendas. Seed omitido.`);
+    logger.debug(`[Seed] Usuario ${userId} ya tiene prendas. Seed omitido.`);
     return { skipped: true };
   }
 
-  console.log(`[Seed] Poblando datos para usuario ${userId}...`);
+  logger.debug(`[Seed] Poblando datos para usuario ${userId}...`);
 
   const createdGarments = [];
   for (const garment of SEED_GARMENTS) {
     try {
       const created = await createGarment(userId, garment);
       createdGarments.push(created);
-      console.log(`[Seed] Prenda creada: ${created.name} [${created.category}]`);
+      logger.debug(`[Seed] Prenda creada: ${created.name} [${created.category}]`);
     } catch (err) {
-      console.error(`[Seed] Error creando ${garment.name}:`, err.message);
+      logger.error(`[Seed] Error creando ${garment.name}:`, err.message);
     }
   }
 
-  console.log(`[Seed] Poblado completado. ${createdGarments.length}/${SEED_GARMENTS.length} prendas creadas.`);
+  logger.debug(`[Seed] Poblado completado. ${createdGarments.length}/${SEED_GARMENTS.length} prendas creadas.`);
   return { skipped: false, garments: createdGarments };
 }
 

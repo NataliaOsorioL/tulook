@@ -14,6 +14,27 @@ export const GARMENT_CATEGORIES_LABELS = {
   [GARMENT_CATEGORIES.ACCESSORY]: 'Accesorios',
 };
 
+export const GARMENT_TYPES = {
+  [GARMENT_CATEGORIES.TOP]: [
+    'Blusa', 'Camisa', 'Crop top', 'Playera', 'Suéter', 'Chamarra',
+    'Abrigo', 'Chaleco', 'Body', 'Top deportivo',
+  ],
+  [GARMENT_CATEGORIES.BOTTOM]: [
+    'Falda', 'Jean', 'Pantalón', 'Short', 'Leggings', 'Bermuda', 'Pantalón de vestir',
+  ],
+  [GARMENT_CATEGORIES.DRESS]: [
+    'Vestido corto', 'Vestido largo', 'Overol', 'Mono',
+  ],
+  [GARMENT_CATEGORIES.SHOES]: [
+    'Tenis', 'Tacones', 'Sandalias', 'Botas', 'Bailarinas',
+    'Playas', 'Mocasines', 'Botines',
+  ],
+  [GARMENT_CATEGORIES.ACCESSORY]: [
+    'Bufanda', 'Gorra', 'Bolso', 'Collar', 'Pulsera', 'Cinturón',
+    'Lentes', 'Sombrero', 'Reloj', 'Pañuelo',
+  ],
+};
+
 export const TEMPERATURE_UNITS = {
   CELSIUS: 'C',
   FAHRENHEIT: 'F',

@@ -1,8 +1,11 @@
+import { logger } from './logger';
 import {
   DAILY_OUTFIT_RULES,
   SCORING_WEIGHTS,
   GARMENT_CATEGORIES,
   GARMENT_CATEGORIES_LABELS,
+  GARMENT_TYPES,
+  SEASON_TAGS,
 } from './constants';
 import { getExcludedSeasonTagsForTemperature } from './weather-mapper';
 
@@ -67,13 +70,13 @@ export function groupByCategory(garments) {
   for (const cat of CATEGORY_ORDER) groups[cat] = [];
   for (const g of garments) {
     if (!g.category) {
-      console.warn('[OutfitGen] Garment without category, skipping:', g.id);
+      logger.warn('[OutfitGen] Garment without category, skipping:', g.id);
       continue;
     }
     if (groups[g.category]) {
       groups[g.category].push(g);
     } else {
-      console.warn('[OutfitGen] Unknown category:', g.category, 'for garment', g.id);
+      logger.warn('[OutfitGen] Unknown category:', g.category, 'for garment', g.id);
     }
   }
   return groups;
@@ -140,7 +143,7 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
   for (const [cat, list] of Object.entries(byCategory)) {
     counts[cat] = list.length;
   }
-  console.log('[OutfitGen] Available per category:', counts, '| preferredMode:', preferredMode);
+  logger.debug('[OutfitGen] Available per category:', counts, '| preferredMode:', preferredMode);
 
   const hasDress = byCategory[GARMENT_CATEGORIES.DRESS].length > 0;
   const hasTopBottom = byCategory[GARMENT_CATEGORIES.TOP].length > 0 && byCategory[GARMENT_CATEGORIES.BOTTOM].length > 0;
@@ -167,11 +170,11 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
   for (const mode of [firstMode, secondMode]) {
     if (!mode) continue;
 
-    console.log('[OutfitGen] Trying mode:', mode);
+    logger.debug('[OutfitGen] Trying mode:', mode);
     const body = pickBody(mode, byCategory, recentGarmentIds, weatherTemp, preferredExcludeIds);
     if (body.reason || body.garments.length === 0) {
       lastError = `[${mode}] ${body.reason || 'No se pudo seleccionar el cuerpo del outfit.'}`;
-      console.log('[OutfitGen] Body pick failed:', lastError);
+      logger.debug('[OutfitGen] Body pick failed:', lastError);
       continue;
     }
 
@@ -180,7 +183,7 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
     const shoesResult = pickRequired(GARMENT_CATEGORIES.SHOES, byCategory, recentGarmentIds, weatherTemp, preferredExcludeIds, position);
     if (!shoesResult.garment) {
       lastError = `[${mode}] ${shoesResult.reason}`;
-      console.log('[OutfitGen] Shoes pick failed:', lastError);
+      logger.debug('[OutfitGen] Shoes pick failed:', lastError);
       continue;
     }
     position++;
@@ -188,7 +191,7 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
     const accResult = pickRequired(GARMENT_CATEGORIES.ACCESSORY, byCategory, recentGarmentIds, weatherTemp, preferredExcludeIds, position);
     if (!accResult.garment) {
       lastError = `[${mode}] ${accResult.reason}`;
-      console.log('[OutfitGen] Accessory pick failed:', lastError);
+      logger.debug('[OutfitGen] Accessory pick failed:', lastError);
       continue;
     }
 
@@ -196,7 +199,7 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
     const result = [...body.garments, shoesResult.garment, accResult.garment];
     const garmentData = result.map((s) => s.garment_data);
     const selected = result.map((s) => ({ id: s.garment_id, cat: s.category_used }));
-    console.log('[OutfitGen] Mode succeeded:', mode, 'Selected:', selected);
+    logger.debug('[OutfitGen] Mode succeeded:', mode, 'Selected:', selected);
 
     const outfitMode = result.some((g) => g.category_used === GARMENT_CATEGORIES.DRESS) ? 'dress' : 'top-bottom';
 
@@ -210,7 +213,7 @@ export function selectDailyOutfitGarments(garments, recentGarmentIds, weatherTem
   }
 
   // Both modes failed
-  console.log('[OutfitGen] All modes failed. Last error:', lastError);
+  logger.debug('[OutfitGen] All modes failed. Last error:', lastError);
   return {
     garments: [],
     name: 'Outfit inválido',
@@ -278,7 +281,7 @@ export function validateOutfit(outfitResult) {
 
   const counts = {};
   for (const c of cats) counts[c] = (counts[c] || 0) + 1;
-  console.log('[validateOutfit] Categories:', counts);
+  logger.debug('[validateOutfit] Categories:', counts);
 
   const hasTop = counts[GARMENT_CATEGORIES.TOP] > 0;
   const hasBottom = counts[GARMENT_CATEGORIES.BOTTOM] > 0;
@@ -337,7 +340,6 @@ export function validateOutfitComposition(selectedGarments) {
   const cats = selectedGarments.map((g) => g.category).filter(Boolean);
   const counts = {};
   for (const c of cats) counts[c] = (counts[c] || 0) + 1;
-  console.log('[OutfitGen] validateOutfitComposition — categories:', counts);
 
   const hasTop = counts[GARMENT_CATEGORIES.TOP] > 0;
   const hasBottom = counts[GARMENT_CATEGORIES.BOTTOM] > 0;
@@ -361,6 +363,29 @@ export function validateOutfitComposition(selectedGarments) {
 
   if (!hasShoes) errors.push('Falta Calzado.');
   if (!hasAccessory) errors.push('Faltan Accesorios.');
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Lightweight validation for manual save: only checks for empty selection
+ * and duplicate categories. Doesn't require full composition.
+ */
+export function validateManualSave(selectedGarments) {
+  if (!selectedGarments || selectedGarments.length === 0) {
+    return { valid: false, errors: ['Selecciona al menos una prenda.'] };
+  }
+
+  const cats = selectedGarments.map((g) => g.category).filter(Boolean);
+  const counts = {};
+  for (const c of cats) counts[c] = (counts[c] || 0) + 1;
+  const errors = [];
+
+  for (const [cat, count] of Object.entries(counts)) {
+    if (count > 1) {
+      errors.push(`No puedes seleccionar más de una prenda de la misma categoría.`);
+    }
+  }
 
   return { valid: errors.length === 0, errors };
 }
@@ -437,7 +462,7 @@ export function translateOutfitError(error) {
   }
 
   // Fallback: log unknown technical error, return safe user message
-  console.warn('[Outfit] Error interno sin traducción:', error);
+  logger.warn('[Outfit] Error interno sin traducción:', error);
   return 'Completa todas las categorías del outfit.';
 }
 
@@ -493,9 +518,9 @@ export function validateSelection(selectedById, garmentsByCategory) {
   const valid = errors.length === 0;
   if (valid) {
     const mode = hasDress ? 'dress' : 'top-bottom';
-    console.log('[Outfit] Outfit válido generado, modo:', mode);
+    logger.debug('[Outfit] Outfit válido generado, modo:', mode);
   } else {
-    console.log('[Outfit] Selección inválida:', errors.join('; '));
+    logger.debug('[Outfit] Selección inválida:', errors.join('; '));
   }
   return { valid, errors };
 }

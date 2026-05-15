@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, Switch, ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
+import SafeImage from '../src/components/SafeImage';
+import { logger } from '../src/utils/logger';
 import { getUserProfile, updateUserProfile } from '../src/services/user.service';
 import { ensureSignedIn } from '../src/services/auth.service';
 import { useTheme } from '../src/context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { loadPersistedFlag, setupChannel, enable, disable } from '../src/services/notification.service';
 
 export default function SettingsScreen() {
   const { themeMode, setThemeMode, colors } = useTheme();
-  const themedStyles = useMemo(() => getStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const themedStyles = useMemo(() => getStyles(colors, insets), [colors, insets]);
   const [profile, setProfile] = useState(null);
   const [notifications, setNotifications] = useState(true);
   const [temperatureUnit, setTemperatureUnit] = useState('C');
@@ -20,6 +25,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     mountedRef.current = true;
     loadProfile();
+    setupChannel();
+    loadPersistedFlag();
     return () => { mountedRef.current = false; };
   }, []);
 
@@ -35,7 +42,7 @@ export default function SettingsScreen() {
         setThemeMode(data.theme || 'light');
       }
     } catch (err) {
-      console.warn('[Config] Error:', err.message);
+      logger.warn('[Config] Error:', err.message);
     } finally {
       if (mountedRef.current) setIsLoading(false);
     }
@@ -47,7 +54,7 @@ export default function SettingsScreen() {
       const userId = await ensureSignedIn();
       await updateUserProfile(userId, updates);
     } catch (err) {
-      console.warn('[Config] Error al guardar:', err.message);
+      logger.warn('[Config] Error al guardar:', err.message);
     } finally {
       if (mountedRef.current) setIsSaving(false);
     }
@@ -62,9 +69,17 @@ export default function SettingsScreen() {
     setThemeMode(newTheme);
   };
 
-  const handleNotificationsChange = (value) => {
+  const handleNotificationsChange = async (value) => {
     setNotifications(value);
-    savePreference({ notifications: value });
+    try {
+      if (value) {
+        await enable();
+      } else {
+        await disable();
+      }
+    } catch {
+      setNotifications(!value);
+    }
   };
 
   const handleLogout = async () => {
@@ -110,11 +125,12 @@ export default function SettingsScreen() {
 
           <View style={themedStyles.profileRow}>
             <View style={themedStyles.profileInfo}>
-              <Image
-                source={{
-                  uri: profile?.avatar_url || 'https://via.placeholder.com/100',
-                }}
+              <SafeImage
+                uri={profile?.avatar_url}
                 style={themedStyles.avatar}
+                iconName="person-outline"
+                iconSize={22}
+                bgColor={colors.configBackButton}
               />
 
               <View>
@@ -226,12 +242,12 @@ export default function SettingsScreen() {
   );
 }
 
-function getStyles(colors) {
+function getStyles(colors, insets = { top: 0 }) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.configBg,
-      paddingTop: 55,
+      paddingTop: insets.top + 10,
     },
 
     header: {
@@ -386,7 +402,7 @@ function getStyles(colors) {
       backgroundColor: colors.configLogoutBg,
       marginHorizontal: 20,
       marginTop: 25,
-      marginBottom: 120,
+      marginBottom: Math.max(insets.bottom + 20, 100),
       borderRadius: 12,
       paddingVertical: 14,
       justifyContent: 'center',

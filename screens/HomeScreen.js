@@ -1,18 +1,21 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import {
-  Platform, View, Text, StyleSheet, Image, ScrollView, SafeAreaView, ActivityIndicator,
+  Platform, View, Text, StyleSheet, Image, ScrollView, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { getHomeDashboard } from '../src/services/home.service';
 import { ensureSignedIn } from '../src/services/auth.service';
+import { logger } from '../src/utils/logger';
 import { useTheme } from '../src/context/ThemeContext';
 
 const HomeScreen = () => {
   const { colors } = useTheme();
-  const themedStyles = useMemo(() => getStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const themedStyles = useMemo(() => getStyles(colors, insets.top), [colors, insets.top]);
 
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +53,7 @@ const HomeScreen = () => {
           }
         } catch (err) {
           if (mountedRef.current) {
-            console.warn('HomeDashboard error:', err.message);
+            logger.warn('HomeDashboard error:', err.message);
           }
         } finally {
           if (mountedRef.current) {
@@ -69,11 +72,11 @@ const HomeScreen = () => {
 
   if (isLoading && !dashboardData) {
     return (
-      <SafeAreaView style={themedStyles.container}>
+      <View style={[themedStyles.container, { paddingTop: insets.top }]}>
         <View style={themedStyles.loadingContainer}>
           <ActivityIndicator size="large" color="#999" />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -83,7 +86,7 @@ const HomeScreen = () => {
   const previewImages = outfit?.preview_images || [];
 
   return (
-    <SafeAreaView style={themedStyles.container}>
+    <View style={[themedStyles.container, { paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={themedStyles.scrollContent}>
 
         <View style={themedStyles.header}>
@@ -152,11 +155,11 @@ const HomeScreen = () => {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
-function getStyles(colors) {
+function getStyles(colors, insetsTop = 0) {
   return StyleSheet.create({
     container: {
       flex: 1,

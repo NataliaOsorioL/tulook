@@ -1,13 +1,47 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { logger } from '../src/utils/logger';
+import SafeImage from '../src/components/SafeImage';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { getGarmentsByUser } from '../src/services/garment.service';
+import { getAllUserOutfits } from '../src/services/outfit.service';
 import { ensureSignedIn } from '../src/services/auth.service';
 import { useTheme } from '../src/context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MONTHS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function getWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return { monday, sunday };
+}
+
+function computeWeeklyUsage(outfits) {
+  const { monday, sunday } = getWeekRange();
+  const weeklyOutfits = outfits.filter((o) => {
+    const ts = o.created_at?.toDate?.() || new Date(o.created_at || 0);
+    return ts >= monday && ts <= sunday;
+  });
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  for (const outfit of weeklyOutfits) {
+    const ts = outfit.created_at?.toDate?.() || new Date(outfit.created_at || 0);
+    const dayIndex = (ts.getDay() + 6) % 7;
+    dayCounts[dayIndex]++;
+  }
+  const maxVal = Math.max(...dayCounts, 1);
+  return { dayCounts, maxVal, total: weeklyOutfits.length };
+}
 
 function computeColorDistribution(garments) {
   const colorMap = {};
@@ -39,32 +73,42 @@ function computeForgottenGarments(garments) {
 
 export default function StatisticsScreen() {
   const { colors } = useTheme();
-  const themedStyles = useMemo(() => getStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const themedStyles = useMemo(() => getStyles(colors, insets), [colors, insets]);
 
   const [garments, setGarments] = useState([]);
+  const [outfits, setOutfits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef(true);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    loadStats();
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
       const userId = await ensureSignedIn();
-      const allGarments = await getGarmentsByUser(userId);
-      if (mountedRef.current) setGarments(allGarments);
+      const [allGarments, allOutfits] = await Promise.all([
+        getGarmentsByUser(userId),
+        getAllUserOutfits(userId),
+      ]);
+      if (mountedRef.current) {
+        setGarments(allGarments);
+        setOutfits(allOutfits);
+      }
     } catch (err) {
-      console.warn('[Stats] Error:', err.message);
+      logger.warn('[Stats] Error:', err.message);
     } finally {
       if (mountedRef.current) setIsLoading(false);
     }
-  };
+  }, []);
 
-  if (isLoading) {
+  useFocusEffect(
+    useCallback(() => {
+      mountedRef.current = true;
+      loadStats();
+      return () => { mountedRef.current = false; };
+    }, [loadStats]),
+  );
+
+  if (isLoading && garments.length === 0) {
     return (
       <View style={themedStyles.container}>
         <View style={themedStyles.header}>
@@ -82,16 +126,10 @@ export default function StatisticsScreen() {
   const colorDistribution = computeColorDistribution(garments);
   const forgotten = computeForgottenGarments(garments);
   const totalGarments = garments.length;
-
-  const maxTimesUsed = Math.max(...garments.map((g) => g.times_used || 0), 1);
-  const barHeights = DAYS.map((_, i) => {
-    const dayGarments = garments.filter((g) => {
-      if (!g.last_used_at) return false;
-      const d = g.last_used_at?.toDate?.() || new Date(g.last_used_at);
-      return d.getDay() === (i + 1) % 7;
-    });
-    const count = dayGarments.reduce((s, g) => s + (g.times_used || 0), 0);
-    return Math.max(20, Math.min(160, Math.round((count / Math.max(maxTimesUsed, 1)) * 140) + 20));
+  const { dayCounts, maxVal } = computeWeeklyUsage(outfits);
+  const barHeights = dayCounts.map((count) => {
+    const ratio = count / maxVal;
+    return Math.max(20, 20 + Math.round(ratio * 140));
   });
 
   return (
@@ -112,7 +150,7 @@ export default function StatisticsScreen() {
 
             <View style={themedStyles.chartContainer}>
               {DAYS.map((day, i) => (
-                <View key={day} style={themedStyles.barGroup}>
+                <View key={`day-${i}`} style={themedStyles.barGroup}>
                   <View style={[i >= 5 ? themedStyles.barPink : themedStyles.bar, { height: barHeights[i] }]} />
                   <Text style={themedStyles.day}>{day}</Text>
                 </View>
@@ -160,9 +198,11 @@ export default function StatisticsScreen() {
             >
               {forgotten.map((g) => (
                 <View key={g.id} style={themedStyles.clotheCard}>
-                  <Image
-                    source={{ uri: g.image_url || 'https://via.placeholder.com/80' }}
+                  <SafeImage
+                    uri={g.image_url}
                     style={themedStyles.clotheImage}
+                    iconName="shirt-outline"
+                    iconSize={24}
                   />
                 </View>
               ))}
@@ -176,12 +216,12 @@ export default function StatisticsScreen() {
   );
 }
 
-function getStyles(colors) {
+function getStyles(colors, insets = { top: 0 }) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.statsBg,
-      paddingTop: 55,
+      paddingTop: insets.top + 10,
     },
 
     header: {
@@ -336,7 +376,7 @@ function getStyles(colors) {
       borderRadius: 25,
       padding: 18,
       elevation: 2,
-      marginBottom: 100,
+      marginBottom: Math.max(insets.bottom + 20, 80),
     },
 
     clothesRow: {

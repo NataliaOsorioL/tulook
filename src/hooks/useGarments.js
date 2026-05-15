@@ -4,6 +4,7 @@ import { getGarmentsByUser, deleteGarment as deleteGarmentService, deleteAllGarm
 import { deleteAllUserOutfits } from '../services/outfit.service';
 import { ensureSignedIn } from '../services/auth.service';
 import { groupByCategory } from '../utils/outfit-generator-v2';
+import { logger } from '../utils/logger';
 
 export function useGarments() {
   const [garmentsByCategory, setGarmentsByCategory] = useState({});
@@ -11,18 +12,23 @@ export function useGarments() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const mountedRef = useRef(true);
+  const allGarmentsRef = useRef([]);
+
+  const syncRef = (garments) => {
+    allGarmentsRef.current = garments;
+  };
 
   const load = useCallback(async () => {
-    console.log('[useGarments] Reloading garments from Firestore...');
+    logger.debug('[useGarments] Reloading garments from Firestore...');
     try {
       setIsLoading(true);
       setError(null);
       const userId = await ensureSignedIn();
       const garments = await getGarmentsByUser(userId);
-
       const grouped = groupByCategory(garments);
-      console.log(`[useGarments] Loaded ${garments.length} garments`);
+      logger.debug(`[useGarments] Loaded ${garments.length} garments`);
       if (mountedRef.current) {
+        syncRef(garments);
         setAllGarments(garments);
         setGarmentsByCategory(grouped);
       }
@@ -34,43 +40,45 @@ export function useGarments() {
   }, []);
 
   const deleteGarment = useCallback(async (garmentId) => {
-    try {
-      // Optimistic: remove from local state immediately
-      const updated = allGarments.filter((g) => g.id !== garmentId);
-      if (mountedRef.current) {
-        setAllGarments(updated);
-        setGarmentsByCategory(groupByCategory(updated));
-      }
-      // Firestore delete
-      await deleteGarmentService(garmentId);
-    } catch (err) {
-      console.warn('[useGarments] deleteGarment error:', err.message);
-      // Reconcile: re-fetch from server
-      load();
+    const current = allGarmentsRef.current;
+    const updated = current.filter((g) => g.id !== garmentId);
+    if (mountedRef.current) {
+      syncRef(updated);
+      setAllGarments(updated);
+      setGarmentsByCategory(groupByCategory(updated));
     }
-  }, [allGarments, load]);
+    await deleteGarmentService(garmentId);
+  }, []);
 
   const deleteAllGarments = useCallback(async () => {
-    try {
-      const userId = await ensureSignedIn();
+    const userId = await ensureSignedIn();
 
-      // Optimistic: clear local state immediately
-      if (mountedRef.current) {
-        setAllGarments([]);
-        setGarmentsByCategory({});
-      }
-
-      // Firestore: delete all garments + all outfit data
-      await Promise.all([
-        deleteAllGarmentsService(userId),
-        deleteAllUserOutfits(userId),
-      ]);
-    } catch (err) {
-      console.warn('[useGarments] deleteAllGarments error:', err.message);
-      // Reconcile: re-fetch from server
-      load();
+    if (mountedRef.current) {
+      syncRef([]);
+      setAllGarments([]);
+      setGarmentsByCategory({});
     }
-  }, [load]);
+
+    const results = await Promise.allSettled([
+      deleteAllGarmentsService(userId),
+      deleteAllUserOutfits(userId),
+    ]);
+
+    const errors = results
+      .filter((r) => r.status === 'rejected')
+      .map((r) => r.reason?.message || 'Error desconocido');
+
+    if (errors.length > 0) {
+      logger.warn('[useGarments] deleteAll partial errors:', errors);
+      const reconciled = await getGarmentsByUser(userId);
+      if (mountedRef.current) {
+        syncRef(reconciled);
+        setAllGarments(reconciled);
+        setGarmentsByCategory(groupByCategory(reconciled));
+      }
+      throw new Error(errors.join('; '));
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
