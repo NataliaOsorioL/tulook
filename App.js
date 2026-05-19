@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import LoginScreen from './screens/LoginScreen';
 import HomeScreen from './screens/HomeScreen';
 import InventoryScreen from './screens/InventoryScreen';
 import OutfitScreen from './screens/OutfitScreen';
@@ -15,6 +16,7 @@ import { seedForUser, validateFirestoreData } from './src/database/seed';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
+const isLoggedIn = false;
 
 async function initializeApp() {
   try {
@@ -39,6 +41,10 @@ async function initializeApp() {
 function AppContent() {
   const { colors } = useTheme();
   const isDark = colors.background === '#121212';
+
+   if (!isLoggedIn) {
+    return <LoginScreen />;
+  }
 
   const navTheme = isDark ? {
     ...DarkTheme,
