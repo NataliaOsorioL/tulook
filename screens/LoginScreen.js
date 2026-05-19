@@ -1,16 +1,22 @@
-import { View,Text,StyleSheet,TextInput,TouchableOpacity,Image,KeyboardAvoidingView,Platform,ScrollView } from 'react-native';
+import {View,Text,StyleSheet,TextInput,TouchableOpacity,Image,KeyboardAvoidingView,Platform,ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : null}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
+
+        {/* logo */}
+        <Image
+          source={require('../assets/logo.PNG')}
+          style={styles.logo}
+        />
 
         <Text style={styles.title}>TuLook</Text>
 
@@ -18,7 +24,6 @@ export default function LoginScreen() {
           Organiza. Combina. Inspira.
         </Text>
 
-        {/* closet cardd */}
         <View style={styles.card}>
 
           <Image
@@ -30,7 +35,7 @@ export default function LoginScreen() {
 
           <View style={styles.formContainer}>
 
-            {/* email  */}
+            {/* email */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Correo Electrónico"
@@ -68,7 +73,7 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* fg pass */}
+            {/* forgot pass */}
             <TouchableOpacity>
               <Text style={styles.forgotText}>
                 ¿Olvidaste tu contraseña?
@@ -107,8 +112,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 70,
-    height: 70,
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
     marginBottom: 10,
   },
 
@@ -128,7 +134,7 @@ const styles = StyleSheet.create({
   card: {
     width: '90%',
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
     elevation: 3,
   },
@@ -137,7 +143,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 420,
     position: 'absolute',
-    opacity: 0.45,
+    opacity: 0.25,
   },
 
   formContainer: {
@@ -168,8 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-
-    backgroundColor: '#D9B7B1',
+    backgroundColor: '#529BD6',
   },
 
   loginText: {
