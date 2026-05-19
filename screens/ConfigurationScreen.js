@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator, Alert,
+  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import SafeImage from '../src/components/SafeImage';
@@ -82,7 +82,30 @@ export default function SettingsScreen() {
     }
   };
 
+  const executeLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (err) {
+      if (mountedRef.current) {
+        Alert.alert('Error', 'No se pudo cerrar la sesion. Intenta de nuevo.');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setIsLoggingOut(false);
+      }
+    }
+  };
+
   const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      const shouldLogout = window.confirm('Estas seguro de que deseas cerrar sesion?');
+      if (shouldLogout) {
+        await executeLogout();
+      }
+      return;
+    }
+
     Alert.alert(
       'Cerrar sesión',
       '¿Estás seguro de que deseas cerrar sesión?',
@@ -91,20 +114,7 @@ export default function SettingsScreen() {
         {
           text: 'Cerrar sesión',
           style: 'destructive',
-          onPress: async () => {
-            setIsLoggingOut(true);
-            try {
-              await logout();
-            } catch (err) {
-              if (mountedRef.current) {
-                Alert.alert('Error', 'No se pudo cerrar la sesión. Intenta de nuevo.');
-              }
-            } finally {
-              if (mountedRef.current) {
-                setIsLoggingOut(false);
-              }
-            }
-          },
+          onPress: executeLogout,
         },
       ],
     );
