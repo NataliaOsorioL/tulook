@@ -1,56 +1,22 @@
-import { useState } from 'react';
-import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Image, KeyboardAvoidingView, Platform, ScrollView,
-  ActivityIndicator, Keyboard,
-} from 'react-native';
+import {View,Text,StyleSheet,TextInput,TouchableOpacity,Image,KeyboardAvoidingView,Platform,ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { login, getAuthErrorMessage } from '../src/services/auth.service';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  async function handleLogin() {
-    Keyboard.dismiss();
-    setError('');
-
-    const trimmedEmail = email.trim();
-
-    if (!trimmedEmail) {
-      setError('Ingresa tu correo electrónico.');
-      return;
-    }
-
-    if (!password) {
-      setError('Ingresa tu contraseña.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await login(trimmedEmail, password);
-    } catch (err) {
-      console.log('[LoginScreen] Error capturado:', err.code, err.message);
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : null}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
+
+        {/* logo */}
+        <Image
+          source={require('../assets/logo.PNG')}
+          style={styles.logo}
+        />
 
         <Text style={styles.title}>TuLook</Text>
 
@@ -69,24 +35,12 @@ export default function LoginScreen() {
 
           <View style={styles.formContainer}>
 
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={18} color="#D32F2F" />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
+            {/* email */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Correo Electrónico"
                 placeholderTextColor="#B7B7B7"
                 style={styles.input}
-                value={email}
-                onChangeText={(text) => { setEmail(text); setError(''); }}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                editable={!isLoading}
               />
 
               <Ionicons
@@ -96,40 +50,30 @@ export default function LoginScreen() {
               />
             </View>
 
+            {/* pass */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Contraseña"
                 placeholderTextColor="#B7B7B7"
-                secureTextEntry={!showPassword}
+                secureTextEntry
                 style={styles.input}
-                value={password}
-                onChangeText={(text) => { setPassword(text); setError(''); }}
-                autoCapitalize="none"
-                autoComplete="password"
-                editable={!isLoading}
               />
 
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color="#B7B7B7"
-                />
-              </TouchableOpacity>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#B7B7B7"
+              />
             </View>
 
-            <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.loginText}>Iniciar Sesión</Text>
-              )}
+            {/* login butt */}
+            <TouchableOpacity style={styles.loginButton}>
+              <Text style={styles.loginText}>
+                Iniciar Sesión
+              </Text>
             </TouchableOpacity>
 
+            {/* forgot pass */}
             <TouchableOpacity>
               <Text style={styles.forgotText}>
                 ¿Olvidaste tu contraseña?
@@ -140,6 +84,7 @@ export default function LoginScreen() {
 
         </View>
 
+        {/* registro */}
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>
             ¿No tienes cuenta?
@@ -167,8 +112,9 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    width: 70,
-    height: 70,
+    width: 120,
+    height: 120,
+    resizeMode: 'contain',
     marginBottom: 10,
   },
 
@@ -188,7 +134,7 @@ const styles = StyleSheet.create({
   card: {
     width: '90%',
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
     elevation: 3,
   },
@@ -197,7 +143,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 420,
     position: 'absolute',
-    opacity: 0.45,
+    opacity: 0.25,
   },
 
   formContainer: {
@@ -228,36 +174,13 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-
-    backgroundColor: '#529bd6',
+    backgroundColor: '#529BD6',
   },
 
   loginText: {
     color: '#fff',
     fontSize: 24,
     fontWeight: '700',
-  },
-
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFEBEE',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 15,
-    gap: 8,
-  },
-
-  errorText: {
-    color: '#D32F2F',
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-
-  loginButtonDisabled: {
-    opacity: 0.7,
   },
 
   forgotText: {
