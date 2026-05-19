@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import SafeImage from '../src/components/SafeImage';
 import { logger } from '../src/utils/logger';
 import { getUserProfile, updateUserProfile } from '../src/services/user.service';
-import { ensureSignedIn } from '../src/services/auth.service';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAuth } from '../src/context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadPersistedFlag, setupChannel, enable, disable } from '../src/services/notification.service';
 
 export default function SettingsScreen() {
   const { themeMode, setThemeMode, colors } = useTheme();
+  const { logout, userId } = useAuth();
   const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => getStyles(colors, insets), [colors, insets]);
   const [profile, setProfile] = useState(null);
@@ -20,6 +21,7 @@ export default function SettingsScreen() {
   const [temperatureUnit, setTemperatureUnit] = useState('C');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -33,7 +35,6 @@ export default function SettingsScreen() {
   const loadProfile = async () => {
     try {
       setIsLoading(true);
-      const userId = await ensureSignedIn();
       const data = await getUserProfile(userId);
       if (data && mountedRef.current) {
         setProfile(data);
@@ -51,7 +52,6 @@ export default function SettingsScreen() {
   const savePreference = async (updates) => {
     try {
       setIsSaving(true);
-      const userId = await ensureSignedIn();
       await updateUserProfile(userId, updates);
     } catch (err) {
       logger.warn('[Config] Error al guardar:', err.message);
@@ -83,6 +83,31 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoggingOut(true);
+            try {
+              await logout();
+            } catch (err) {
+              if (mountedRef.current) {
+                Alert.alert('Error', 'No se pudo cerrar la sesión. Intenta de nuevo.');
+              }
+            } finally {
+              if (mountedRef.current) {
+                setIsLoggingOut(false);
+              }
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleEditProfile = () => {
@@ -232,9 +257,19 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={themedStyles.logoutButton} onPress={handleLogout}>
-          <MaterialIcons name="logout" size={18} color="#fff" />
-          <Text style={themedStyles.logoutText}>Cerrar sesión</Text>
+        <TouchableOpacity
+          style={[themedStyles.logoutButton, isLoggingOut && themedStyles.logoutButtonDisabled]}
+          onPress={handleLogout}
+          disabled={isLoggingOut}
+        >
+          {isLoggingOut ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <MaterialIcons name="logout" size={18} color="#fff" />
+              <Text style={themedStyles.logoutText}>Cerrar sesión</Text>
+            </>
+          )}
         </TouchableOpacity>
 
       </ScrollView>
@@ -414,6 +449,10 @@ function getStyles(colors, insets = { top: 0 }) {
     logoutText: {
       color: colors.configLogoutText,
       fontWeight: '600',
+    },
+
+    logoutButtonDisabled: {
+      opacity: 0.7,
     },
   });
 }

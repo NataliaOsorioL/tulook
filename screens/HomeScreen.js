@@ -8,12 +8,13 @@ import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { getHomeDashboard } from '../src/services/home.service';
-import { ensureSignedIn } from '../src/services/auth.service';
 import { logger } from '../src/utils/logger';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAuth } from '../src/context/AuthContext';
 
 const HomeScreen = () => {
   const { colors } = useTheme();
+  const { userId } = useAuth();
   const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => getStyles(colors, insets.top), [colors, insets.top]);
 
@@ -28,8 +29,6 @@ const HomeScreen = () => {
       const loadDashboard = async () => {
         try {
           setIsLoading(true);
-
-          const userId = await ensureSignedIn();
 
           let location = null;
           try {

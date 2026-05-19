@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { logger } from '../src/utils/logger';
 import { useGarments } from '../src/hooks/useGarments';
-import { ensureSignedIn } from '../src/services/auth.service';
+import { useAuth } from '../src/context/AuthContext';
 import { saveOutfitManually, getRecentOutfitGarmentIds } from '../src/services/outfit.service';
 import {
   GARMENT_CATEGORIES,
@@ -103,6 +103,7 @@ function GarmentList({ garments, selectedId, onSelect, styles: s }) {
 
 export default function CreateOutfitScreen() {
   const { colors } = useTheme();
+  const { userId } = useAuth();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => getStyles(colors, insets), [colors, insets]);
   const navigation = useNavigation();
@@ -236,8 +237,6 @@ export default function CreateOutfitScreen() {
         return;
       }
 
-      const userId = await ensureSignedIn();
-
       const recentIds = new Set();
       try {
         const ids = await getRecentOutfitGarmentIds(userId);
@@ -322,7 +321,6 @@ export default function CreateOutfitScreen() {
     setValidationErrors([]);
 
     try {
-      const userId = await ensureSignedIn();
       const names = list.map((g) => g.name || g.emoji || 'Prenda').join(' + ');
       logger.debug('[OUTFIT] Guardando outfit...', names);
 

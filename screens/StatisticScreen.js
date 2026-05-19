@@ -7,8 +7,8 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { getGarmentsByUser } from '../src/services/garment.service';
 import { getAllUserOutfits } from '../src/services/outfit.service';
-import { ensureSignedIn } from '../src/services/auth.service';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAuth } from '../src/context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -73,6 +73,7 @@ function computeForgottenGarments(garments) {
 
 export default function StatisticsScreen() {
   const { colors } = useTheme();
+  const { userId } = useAuth();
   const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => getStyles(colors, insets), [colors, insets]);
 
@@ -84,7 +85,6 @@ export default function StatisticsScreen() {
   const loadStats = useCallback(async () => {
     try {
       setIsLoading(true);
-      const userId = await ensureSignedIn();
       const [allGarments, allOutfits] = await Promise.all([
         getGarmentsByUser(userId),
         getAllUserOutfits(userId),

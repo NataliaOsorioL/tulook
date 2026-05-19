@@ -8,18 +8,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import { getAuthErrorMessage } from '../src/services/auth.service';
 
-export default function LoginScreen({ navigation }) {
-  const { login } = useAuth();
+export default function ForgotPasswordScreen({ navigation }) {
+  const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [success, setSuccess] = useState('');
   const isMounted = useRef(true);
 
-  async function handleLogin() {
+  async function handleReset() {
     Keyboard.dismiss();
     setError('');
+    setSuccess('');
 
     const trimmedEmail = email.trim();
 
@@ -28,14 +28,13 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
-    if (!password) {
-      setError('Ingresa tu contraseña.');
-      return;
-    }
-
     setIsLoading(true);
     try {
-      await login(trimmedEmail, password);
+      await resetPassword(trimmedEmail);
+      if (isMounted.current) {
+        setSuccess('Te hemos enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+        setEmail('');
+      }
     } catch (err) {
       if (isMounted.current) {
         setError(getAuthErrorMessage(err));
@@ -57,33 +56,38 @@ export default function LoginScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          disabled={isLoading}
+        >
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
 
         <Image
           source={require('../assets/logo.png')}
           style={styles.logo}
         />
 
-        <Text style={styles.title}>TuLook</Text>
+        <Text style={styles.title}>Recuperar Contraseña</Text>
 
         <Text style={styles.subtitle}>
-          Organiza. Combina. Inspira.
+          Te enviaremos un enlace para restablecer tu contraseña
         </Text>
 
         <View style={styles.card}>
-
-          <Image
-            source={{
-              uri: 'https://via.placeholder.com/320x350',
-            }}
-            style={styles.backgroundImage}
-          />
-
           <View style={styles.formContainer}>
-
             {error ? (
               <View style={styles.errorContainer}>
                 <Ionicons name="alert-circle" size={18} color="#D32F2F" />
                 <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {success ? (
+              <View style={styles.successContainer}>
+                <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
+                <Text style={styles.successText}>{success}</Text>
               </View>
             ) : null}
 
@@ -93,83 +97,38 @@ export default function LoginScreen({ navigation }) {
                 placeholderTextColor="#B7B7B7"
                 style={styles.input}
                 value={email}
-                onChangeText={(text) => { setEmail(text); setError(''); }}
+                onChangeText={(text) => { setEmail(text); setError(''); setSuccess(''); }}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoComplete="email"
                 editable={!isLoading}
               />
-
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color="#B7B7B7"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                placeholder="Contraseña"
-                placeholderTextColor="#B7B7B7"
-                secureTextEntry={!showPassword}
-                style={styles.input}
-                value={password}
-                onChangeText={(text) => { setPassword(text); setError(''); }}
-                autoCapitalize="none"
-                autoComplete="password"
-                editable={!isLoading}
-              />
-
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color="#B7B7B7"
-                />
-              </TouchableOpacity>
+              <Ionicons name="mail-outline" size={20} color="#B7B7B7" />
             </View>
 
             <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
+              style={[styles.resetButton, isLoading && styles.resetButtonDisabled]}
+              onPress={handleReset}
               disabled={isLoading}
               activeOpacity={0.8}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.loginText}>Iniciar Sesión</Text>
+                <Text style={styles.resetText}>Enviar Enlace</Text>
               )}
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate('ForgotPassword')}
-              disabled={isLoading}
-            >
-              <Text style={styles.forgotText}>
-                ¿Olvidaste tu contraseña?
-              </Text>
-            </TouchableOpacity>
-
           </View>
-
         </View>
 
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>
-            ¿No tienes cuenta?
-          </Text>
-
+        <View style={styles.backContainer}>
           <TouchableOpacity
-            onPress={() => navigation.navigate('Register')}
+            onPress={() => navigation.goBack()}
             disabled={isLoading}
           >
-            <Text style={styles.registerLink}>
-              {' '}Regístrate aquí
-            </Text>
+            <Text style={styles.backLink}>Volver a Iniciar Sesión</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -179,7 +138,6 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-
   container: {
     flexGrow: 1,
     backgroundColor: '#F6F2EA',
@@ -187,27 +145,38 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 40,
   },
-
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+  },
   logo: {
-    width: 120,
-    height: 120,
+    width: 100,
+    height: 100,
     resizeMode: 'contain',
     marginBottom: 10,
   },
-
   title: {
-    fontSize: 42,
+    fontSize: 32,
     fontWeight: '700',
     color: '#000',
   },
-
   subtitle: {
-    fontSize: 20,
+    fontSize: 16,
     color: '#222',
-    marginTop: 5,
-    marginBottom: 30,
+    marginTop: 8,
+    marginBottom: 25,
+    textAlign: 'center',
+    paddingHorizontal: 30,
   },
-
   card: {
     width: '90%',
     backgroundColor: '#fff',
@@ -215,19 +184,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 3,
   },
-
-  backgroundImage: {
-    width: '100%',
-    height: 420,
-    position: 'absolute',
-    opacity: 0.25,
-  },
-
   formContainer: {
     padding: 20,
-    paddingTop: 60,
   },
-
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,14 +197,12 @@ const styles = StyleSheet.create({
     height: 55,
     elevation: 2,
   },
-
   input: {
     flex: 1,
     fontSize: 16,
     color: '#000',
   },
-
-  loginButton: {
+  resetButton: {
     marginTop: 5,
     height: 58,
     borderRadius: 30,
@@ -253,17 +210,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#529BD6',
   },
-
-  loginButtonDisabled: {
+  resetButtonDisabled: {
     opacity: 0.7,
   },
-
-  loginText: {
+  resetText: {
     color: '#fff',
     fontSize: 24,
     fontWeight: '700',
   },
-
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -274,33 +228,35 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     gap: 8,
   },
-
   errorText: {
     color: '#D32F2F',
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
   },
-
-  forgotText: {
-    textAlign: 'center',
-    marginTop: 18,
-    fontWeight: '600',
-    color: '#222',
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 15,
+    gap: 8,
   },
-
-  registerContainer: {
+  successText: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  backContainer: {
     flexDirection: 'row',
     marginTop: 25,
   },
-
-  registerText: {
+  backLink: {
     fontSize: 16,
-  },
-
-  registerLink: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#000',
   },
 });

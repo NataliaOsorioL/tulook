@@ -9,10 +9,10 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   createGarment, uploadGarmentImage, createGarmentFromEmoji,
 } from '../src/services/garment.service';
-import { ensureSignedIn } from '../src/services/auth.service';
 import { useGarments } from '../src/hooks/useGarments';
 import { useOutfits } from '../src/hooks/useOutfits';
 import { logger } from '../src/utils/logger';
+import { useAuth } from '../src/context/AuthContext';
 import { GARMENT_CATEGORIES, GARMENT_CATEGORIES_LABELS, GARMENT_TYPES } from '../src/utils/constants';
 import { useTheme } from '../src/context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,6 +53,7 @@ function buildInfo(garment) {
 
 const InventarioScreen = () => {
   const { colors } = useTheme();
+  const { userId } = useAuth();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isSmallScreen = windowHeight < 700;
@@ -177,8 +178,6 @@ const InventarioScreen = () => {
     try {
       const pg = pendingGarment.current;
       if (!pg) return;
-
-      const userId = await ensureSignedIn();
 
       if (pg.type === 'photo') {
         setProcessingLabel('Subiendo imagen...');
