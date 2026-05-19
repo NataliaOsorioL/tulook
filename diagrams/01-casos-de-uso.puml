@@ -1,0 +1,140 @@
+@startuml
+'
+' Diagrama de Casos de Uso - TuLook V2
+' Basado estrictamente en el código fuente existente
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 14
+}
+skinparam usecase {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 12
+}
+skinparam package {
+  BorderColor #2D4059
+  BackgroundColor #F5F5F5
+  FontColor #1A1A2E
+  FontSize 13
+  FontStyle bold
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontColor #333333
+  FontSize 11
+}
+
+left to right direction
+
+' =============================================================================
+' ACTORES
+' =============================================================================
+actor "Usuario" as user
+
+' =============================================================================
+' SISTEMA (límite)
+' =============================================================================
+rectangle "TuLook V2" as system {
+
+  ' ---------------------------------------------------------------------------
+  ' DASHBOARD
+  ' ---------------------------------------------------------------------------
+  package "Dashboard" as p_dash {
+    usecase "Visualizar Dashboard" as UC1
+    note right of UC1
+      **Flujo:**
+      1. Obtener ubicación del dispositivo
+      2. Cargar perfil del usuario
+      3. Obtener clima actual (OWM + caché)
+      4. Cargar / generar outfit del día
+      5. Cargar prendas recientes
+    end note
+  }
+
+  ' ---------------------------------------------------------------------------
+  ' INVENTARIO
+  ' ---------------------------------------------------------------------------
+  package "Inventario" as p_inv {
+    usecase "Gestionar Prendas" as UC2
+    usecase "Agregar Prenda\n(desde cámara o emoji)" as UC2a
+    usecase "Eliminar Prenda" as UC2b
+
+    usecase "Gestionar Outfits" as UC3
+    usecase "Eliminar Outfit" as UC3a
+  }
+
+  ' ---------------------------------------------------------------------------
+  ' CREACIÓN DE OUTFITS
+  ' ---------------------------------------------------------------------------
+  package "Creación de Outfits" as p_out {
+    usecase "Crear Outfit" as UC4
+    usecase "Generar Outfit\nAutomáticamente" as UC4a
+    usecase "Guardar Outfit\nManual" as UC4b
+  }
+
+  ' ---------------------------------------------------------------------------
+  ' ESTADÍSTICAS
+  ' ---------------------------------------------------------------------------
+  package "Estadísticas" as p_stats {
+    usecase "Ver Estadísticas" as UC5
+  }
+
+  ' ---------------------------------------------------------------------------
+  ' CONFIGURACIÓN
+  ' ---------------------------------------------------------------------------
+  package "Configuración" as p_config {
+    usecase "Configurar Preferencias" as UC6
+    usecase "Cambiar Tema\n(claro / oscuro / auto)" as UC6a
+    usecase "Cambiar Unidad\nde Temperatura\n(°C / °F)" as UC6b
+    usecase "Gestionar\nNotificaciones" as UC6c
+  }
+}
+
+' =============================================================================
+' RELACIONES ACTOR → CASOS DE USO
+' =============================================================================
+user --> UC1
+user --> UC2
+user --> UC3
+user --> UC4
+user --> UC5
+user --> UC6
+
+' =============================================================================
+' RELACIONES <<include>> ENTRE CASOS DE USO
+' =============================================================================
+UC2 ..> UC2a : <<include>>
+UC2 ..> UC2b : <<include>>
+UC3 ..> UC3a : <<include>>
+UC4 ..> UC4a : <<include>>
+UC4 ..> UC4b : <<include>>
+UC6 ..> UC6a : <<include>>
+UC6 ..> UC6b : <<include>>
+UC6 ..> UC6c : <<include>>
+
+' =============================================================================
+' NOTAS DEL SISTEMA
+' =============================================================================
+note left of system
+  **Inicialización automática del sistema**
+  (se ejecuta al abrir la app, sin intervención del usuario)
+  ____________________________________
+  1. Autenticación con usuario fijo
+     (seed-user-001, modo desarrollo)
+  2. Siembra de datos de prueba
+     (9 prendas iniciales si el usuario
+      no tiene datos en Firestore)
+  3. Validación de datos en Firestore
+  4. Carga de preferencias del usuario
+     (tema, unidad temperatura,
+      estado de notificaciones)
+end note
+
+@enduml

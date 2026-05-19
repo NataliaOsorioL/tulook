@@ -1,0 +1,130 @@
+@startuml
+'
+' Diagrama de Secuencia - Dashboard: Generación de Outfit del Día
+' Detalle de getOrGenerateDailyOutfit llamado desde home.service
+' Complementa a 05a-secuencia-dashboard-orquestacion.puml
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+
+title "Flujo 2b: Dashboard — Generación de Outfit del Día"
+caption "Detalle de outfit.service: getOrGenerateDailyOutfit"
+
+participant "home.service" as homeSvc
+participant "outfit.service" as osvc
+participant "garment.service" as gsvc
+participant "outfit-generator-v2" as gen
+database "Firebase\nFirestore" as fb
+
+== Entrada desde home.service ==
+
+homeSvc -> osvc : getOrGenerateDailyOutfit(userId, weatherData)
+activate osvc
+
+osvc -> osvc : todayString() → "2026-05-18"
+
+osvc -> osvc : getDailyOutfit(userId, date)
+osvc -> fb : query("daily_outfits",\nwhere user_id == userId,\nwhere assigned_date == date)
+fb --> osvc : [] | [DailyOutfit]
+
+alt Ya existe outfit para hoy
+  osvc -> osvc : getOutfitWithGarments(existing.outfit_id)
+  osvc -> fb : getDoc("outfits/{outfitId}")
+  fb --> osvc : Outfit
+  osvc -> fb : query("outfit_garments",\nwhere outfit_id == outfitId)
+  fb --> osvc : OutfitGarment[]
+  osvc -> gsvc : getGarmentsByIds(garmentIds)
+  activate gsvc
+  gsvc -> fb : query("garments",\nwhere __name__ in batch [10])
+  fb --> gsvc : Garment[]
+  gsvc --> osvc : Garment[]
+  deactivate gsvc
+  osvc --> homeSvc : { isNew: false, outfit: Outfit+ }
+
+else No existe outfit → generar nuevo
+  osvc -> osvc : generateAndSaveDailyOutfit(userId, weatherData)
+  activate osvc
+
+  osvc -> gsvc : getGarmentsByUser(userId)
+  activate gsvc
+  gsvc -> fb : query("garments",\nwhere user_id == userId)
+  fb --> gsvc : Garment[]
+  gsvc --> osvc : Garment[]
+  deactivate gsvc
+
+  osvc -> gen : canGenerateOutfit(allGarments)
+  activate gen
+  gen --> osvc : { allowed, reason }
+  deactivate gen
+
+  alt No se puede generar
+    osvc --> homeSvc : { success: false, reason }
+  else Puede generar
+
+    osvc -> osvc : getRecentOutfitGarmentIds(userId, 14)
+    osvc -> fb : query("daily_outfits",\nwhere user_id, assigned_date >= since)
+    fb --> osvc : DailyOutfit[14 días]
+    osvc -> fb : query("outfit_garments",\nwhere outfit_id in batch [10])
+    loop Por cada lote de 10 outfits
+      fb --> osvc : OutfitGarment[]
+    end
+    osvc -> osvc : allGarmentIds (Set)
+
+    group Algoritmo de selección
+      osvc -> gen : selectDailyOutfitGarments(\ngarments, recentIds, temp)
+      activate gen
+      gen -> gen : groupByCategory(garments)
+      gen -> gen : Determinar modo\n(dress vs top-bottom)
+      gen -> gen : computeGarmentScore()\n+ Random jitter
+      gen -> gen : pickBody() + pickRequired(SHOES)\n+ pickRequired(ACCESSORY)
+      gen --> osvc : { garments[], name, description }
+      deactivate gen
+    end
+
+    group Persistencia en Firestore (batch)
+      osvc -> fb : writeBatch()
+      osvc -> fb : batch.set("outfits/{id}", outfitData)
+      osvc -> fb : batch.set("outfit_garments/{id}" x N, ogData)
+      osvc -> fb : batch.set("daily_outfits/{id}", dailyData)
+      osvc -> fb : batch.commit()
+      fb --> osvc : ok
+    end
+
+    osvc -> gsvc : incrementGarmentUsage(garmentIds)
+    activate gsvc
+    gsvc -> fb : updateDoc × N\n(times_used +1, last_used_at)
+    fb --> gsvc : ok
+    gsvc --> osvc : void
+    deactivate gsvc
+
+    osvc --> homeSvc : { success: true, outfit: Outfit+ }
+  end
+  deactivate osvc
+end
+deactivate osvc
+
+legend right
+  == Fragmentación ==
+  Este diagrama detalla el paso
+  "getOrGenerateDailyOutfit"
+  del Flujo 2a (orquestación).
+  Ver 05a para el contexto completo.
+end legend
+
+@enduml

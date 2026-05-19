@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,17 +12,23 @@ import InventoryScreen from './screens/InventoryScreen';
 import OutfitScreen from './screens/OutfitScreen';
 import StatisticsScreen from './screens/StatisticScreen';
 import ConfigurationScreen from './screens/ConfigurationScreen';
-import { ensureSignedIn } from './src/services/auth.service';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { seedForUser, validateFirestoreData } from './src/database/seed';
+import { createUserProfile, getUserProfile } from './src/services/user.service';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const Tab = createBottomTabNavigator();
-const isLoggedIn = false;
 
-async function initializeApp() {
+async function initializeAppForUser(userId, email) {
   try {
-    const userId = await ensureSignedIn();
-    console.log('[App] Usuario autenticado:', userId);
+    const profile = await getUserProfile(userId);
+    if (!profile) {
+      await createUserProfile(userId, {
+        name: email?.split('@')[0] || 'Usuario',
+        email: email || '',
+      });
+      console.log('[App] Perfil de usuario creado');
+    }
 
     const seed = await seedForUser(userId);
     if (!seed.skipped) {
@@ -40,9 +47,26 @@ async function initializeApp() {
 
 function AppContent() {
   const { colors } = useTheme();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const initRun = useRef(false);
   const isDark = colors.background === '#121212';
 
-   if (!isLoggedIn) {
+  useEffect(() => {
+    if (isAuthenticated && user && !initRun.current) {
+      initRun.current = true;
+      initializeAppForUser(user.uid, user.email);
+    }
+  }, [isAuthenticated, user]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F6F2EA' }}>
+        <ActivityIndicator size="large" color="#529bd6" />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
     return <LoginScreen />;
   }
 
@@ -124,19 +148,12 @@ function AppContent() {
 }
 
 export default function App() {
-  const initRun = useRef(false);
-
-  useEffect(() => {
-    if (!initRun.current) {
-      initRun.current = true;
-      initializeApp();
-    }
-  }, []);
-
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppContent />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

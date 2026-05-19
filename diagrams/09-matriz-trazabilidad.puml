@@ -1,0 +1,37 @@
+@startuml
+'
+' Matriz de Trazabilidad - TuLook V2
+' Relación: Caso de Uso → Screen → Servicio(s) → Entidades → Diagramas
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 10
+
+title "Matriz de Trazabilidad — TuLook V2"
+
+' Tabla usando salt widget
+salt
+{
+{T: # | T: Caso de Uso | T: Screen | T: Servicio(s) principal(es) | T: Entidades Firestore | T: Diagramas relacionados}
+{1| Visualizar Dashboard | HomeScreen | home.service, weather.service, outfit.service | User, Garment, Outfit, DailyOutfit, WeatherCache | 05a, 05b}
+{2| Gestionar Prendas\n(Agregar + Eliminar) | InventoryScreen | garment.service, github.service, auth.service | Garment | 06}
+{3| Gestionar Outfits\n(Eliminar) | InventoryScreen | outfit.service, auth.service | Outfit, OutfitGarment, DailyOutfit | —}
+{4| Crear Outfit\n(Manual) | OutfitScreen | outfit.service, garment.service, auth.service | Outfit, OutfitGarment, Garment | 07a}
+{5| Crear Outfit\n(Automático) | OutfitScreen | outfit.service, outfit-generator-v2, auth.service | Outfit, OutfitGarment, DailyOutfit, Garment | 07b}
+{6| Ver Estadísticas | StatisticScreen | garment.service, outfit.service, auth.service | Garment, Outfit | 08}
+{7| Configurar Preferencias\n(Tema, Unidad, Notif.) | ConfigurationScreen | user.service, notification.service, auth.service | User | —}
+{8| Inicializar Sistema\n(automático) | App.js | auth.service, user.service, seed.js, garment.service | User, Garment | 04}
+}
+@endsalt
+
+note bottom
+  **Leyenda:**
+  · Los números de "Diagramas relacionados" corresponden a los archivos
+    05a, 05b, 06, 07a, 07b, 08, 04 en la carpeta diagrams/.
+  · Los casos de uso 3 y 7 no tienen diagramas de secuencia dedicados;
+    se cubren parcialmente en flujos relacionados.
+  · "Inicializar Sistema" es automático (no lo inicia el usuario).
+end note
+
+@enduml

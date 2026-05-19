@@ -1,0 +1,132 @@
+@startuml
+'
+' Diagrama de Componentes - TuLook V2 (Versión Resumida)
+' Solo muestra capas, módulos principales y dependencias entre capas.
+' Versión detallada (~50 flechas) en 02-componentes.puml
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam package {
+  BorderThickness 1
+  FontSize 13
+  FontStyle bold
+  FontColor #1A1A2E
+}
+skinparam component {
+  BorderColor #2D4059
+  FontColor #1A1A2E
+  FontSize 10
+}
+skinparam arrow {
+  Color #777777
+  FontSize 10
+}
+skinparam database {
+  BorderColor #2D4059
+  FontColor #1A1A2E
+}
+
+title "Diagrama de Componentes — TuLook V2\nVersión Resumida (vista por capas)"
+
+top to bottom direction
+
+' ============================================================================
+' LAYER 1: PRESENTACIÓN
+' ============================================================================
+package "Capa de Presentación" #E8F4F8 {
+  [App.js]
+  [HomeScreen]
+  [InventoryScreen]
+  [OutfitScreen]
+  [StatisticScreen]
+  [ConfigurationScreen]
+  [SafeImage]
+}
+
+' ============================================================================
+' LAYER 2: ESTADO
+' ============================================================================
+package "Manejo de Estado" #F0E6F6 {
+  [useGarments]
+  [useOutfits]
+  [ThemeContext]
+}
+
+' ============================================================================
+' LAYER 3: SERVICIOS
+' ============================================================================
+package "Capa de Servicios" #E8F8E8 {
+  [auth.service]
+  [user.service]
+  [garment.service]
+  [outfit.service]
+  [weather.service]
+  [github.service]
+  [home.service]
+  [notification.service]
+}
+
+' ============================================================================
+' LAYER 4: UTILIDADES
+' ============================================================================
+package "Utilidades y Configuración" #FFF8DC {
+  [constants]
+  [logger]
+  [weather-mapper]
+  [outfit-generator]   note "LEGACY"
+  [outfit-generator-v2]
+  [notification-helpers]
+  [firebase.js]
+  [seed.js]
+}
+
+' ============================================================================
+' LAYER 5: EXTERNOS
+' ============================================================================
+package "Sistemas Externos" #F5F5F5 {
+  database "Firebase\nFirestore" as fb
+  [GitHub REST API]
+  [OpenWeatherMap API]
+  [Expo SDK]
+}
+
+' ============================================================================
+' DEPENDENCIAS ENTRE CAPAS (solo direcciones generales)
+' ============================================================================
+Presentación -.-> Estado
+Presentación -.-> Servicios
+Presentación -.-> Utilidades
+
+Estado -.-> Servicios
+Estado -.-> Utilidades
+
+Servicios -.-> Utilidades
+Servicios -.-> Externos
+
+Utilidades -.-> Externos
+
+' ============================================================================
+' NOTAS
+' ============================================================================
+note bottom
+  **Versión resumida** — Las flechas representan dependencias
+  generales entre capas, no relaciones específicas entre módulos.
+  Para el detalle completo (~50 dependencias etiquetadas),
+  consultar 02-componentes.puml (versión detallada).
+end note
+
+legend right
+  == Dependencias ==
+  -.-> dirección de dependencia
+
+  == Capas ==
+  #E8F4F8 Presentación (UI)
+  #F0E6F6 Estado (Hooks + Context)
+  #E8F8E8 Servicios (negocio)
+  #FFF8DC Utilidades + Config
+  #F5F5F5 Sistemas externos
+end legend
+
+@enduml

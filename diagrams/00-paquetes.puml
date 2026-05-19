@@ -1,0 +1,78 @@
+@startuml
+'
+' Diagrama de Paquetes - TuLook V2
+' Vista arquitectónica de alto nivel
+' Puente entre Casos de Uso y Diagrama de Componentes
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+
+skinparam package {
+  BorderThickness 2
+  FontSize 14
+  FontStyle bold
+  FontColor #1A1A2E
+}
+skinparam arrow {
+  Color #555555
+  FontSize 11
+  Thickness 2
+}
+
+title "Diagrama de Paquetes — TuLook V2\nVista Arquitectónica de Alto Nivel"
+
+top to bottom direction
+
+package "Capa de Presentación\n<Screens + SafeImage>" as pres #E8F4F8 {
+}
+package "Capa de Manejo de Estado\n<Hooks + Contexto>" as state #F0E6F6 {
+}
+package "Capa de Servicios\n<8 módulos funcionales>" as svc #E8F8E8 {
+}
+package "Capa de Utilidades\ny Configuración\n<constants, logger, generadores,\n firebase.js, seed.js>" as utils #FFF8DC {
+}
+package "Sistemas Externos\n<Firebase Firestore,\n GitHub API, OpenWeatherMap,\n Expo SDK>" as ext #F5F5F5 {
+}
+
+' Dependencias entre capas
+pres --> state : Consume React Context
+pres --> svc : Invoca operaciones\nde negocio
+pres --> utils : Usa constantes\ny loggers
+
+state --> svc : Obtiene datos\ny ejecuta lógica
+state --> utils : Validaciones\ny agrupaciones
+
+svc --> utils : Depende de utilidades\ny configuración
+svc --> ext : Persiste datos,\nsube imágenes,\nconsulta clima
+
+utils --> ext : Conexión directa\n(Firestore SDK,\nFileSystem)
+
+legend right
+  == Capas de la arquitectura ==
+
+  **Presentación** (#E8F4F8)
+  Interfaz de usuario
+
+  **Estado** (#F0E6F6)
+  Estado local y contexto
+
+  **Servicios** (#E8F8E8)
+  Lógica de negocio
+
+  **Utilidades** (#FFF8DC)
+  Funciones auxiliares
+
+  **Externos** (#F5F5F5)
+  Plataformas externas
+end legend
+
+note bottom
+  **Principio arquitectónico:**
+  Las dependencias son estrictamente unidireccionales.
+  Ninguna capa inferior conoce ni depende de una superior.
+  Las flechas señalan dirección de dependencia ("depende de").
+end note
+
+@enduml

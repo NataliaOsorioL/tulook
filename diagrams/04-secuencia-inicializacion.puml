@@ -1,0 +1,141 @@
+@startuml
+'
+' Diagrama de Secuencia - Inicialización de la App
+' Basado en App.js + ThemeContext + seed.js
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+skinparam lifeline {
+  BorderColor #2D4059
+}
+
+title "Flujo 1: Inicialización de la Aplicación"
+
+actor "Usuario" as user
+participant "App.js" as app
+participant "ThemeContext" as tctx
+participant "auth.service" as auth
+participant "user.service" as usvc
+participant "seed.js" as seed
+participant "garment.service" as gsvc
+database "Firebase\nFirestore" as fb
+
+== Render inicial ==
+
+user -> app : Abre la app
+activate app
+
+app -> app : initializeApp()\n(useEffect, una vez)
+
+app -> tctx : <ThemeProvider>
+activate tctx
+
+tctx -> auth : ensureSignedIn()
+activate auth
+auth -> usvc : getUserProfile(FIXED_USER_ID)
+activate usvc
+usvc -> fb : getDoc("users/{FIXED_USER_ID}")
+fb --> usvc : snapshot | null
+
+alt Perfil no existe
+  usvc -> fb : setDoc("users/{FIXED_USER_ID}",\n{ name, email, ... })
+  fb --> usvc : ok
+  usvc --> auth : null (creado)
+else Perfil existe
+  usvc --> auth : User
+end
+deactivate usvc
+auth --> tctx : FIXED_USER_ID
+deactivate auth
+
+tctx -> usvc : getUserProfile(FIXED_USER_ID)
+activate usvc
+usvc -> fb : getDoc("users/{uid}")
+fb --> usvc : { theme: "light", ... }
+usvc --> tctx : UserProfile
+deactivate usvc
+
+tctx -> tctx : setThemeMode(resolved)\n(Listen system theme changes)
+
+tctx --> app : ThemeProvider listo
+deactivate tctx
+
+== Inicialización del sistema ==
+
+app -> auth : ensureSignedIn()
+activate auth
+auth -> usvc : getUserProfile(FIXED_USER_ID)
+usvc --> auth : profile
+auth --> app : "seed-user-001"
+deactivate auth
+
+app -> seed : seedForUser("seed-user-001")
+activate seed
+
+seed -> gsvc : getGarmentsByUser(userId)
+activate gsvc
+gsvc -> fb : query("garments",\nwhere user_id == userId, limit 1)
+fb --> gsvc : [] (vacío)
+gsvc --> seed : []
+deactivate gsvc
+
+alt Usuario sin prendas (seed)
+  loop 9 veces (SEED_GARMENTS)
+    seed -> gsvc : createGarment(userId, template)
+    activate gsvc
+    gsvc -> fb : addDoc("garments",\n{ user_id, name, category, ... })
+    fb --> gsvc : DocumentReference
+    gsvc --> seed : Garment
+    deactivate gsvc
+  end
+else Ya tiene prendas (omitido)
+  note right : seed.skipped = true
+end
+
+seed --> app : { skipped, garments[] }
+deactivate seed
+
+app -> seed : validateFirestoreData(userId)
+activate seed
+seed -> gsvc : getGarmentsByUser(userId)
+activate gsvc
+gsvc -> fb : query("garments",\nwhere user_id == userId)
+fb --> gsvc : Garment[]
+gsvc --> seed : Garment[]
+deactivate gsvc
+
+seed -> seed : Verificar categorías\n(top, bottom, shoes, dress, accessory)
+
+seed --> app : ValidationCheck[]
+deactivate seed
+
+note right of app
+  NavigationContainer +
+  BottomTabNavigator renderizado\ncon 5 tabs
+end note
+
+app -> user : Muestra HomeScreen
+deactivate app
+
+@enduml

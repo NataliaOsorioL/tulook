@@ -1,0 +1,152 @@
+@startuml
+'
+' Diagrama de Clases - TuLook V2 (Versión Resumida)
+' Solo entidades Firestore con atributos clave y relaciones.
+' Versión detallada (con servicios, hooks y dependencias) en 03-clases.puml
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontSize 11
+skinparam package {
+  BorderThickness 1
+  FontSize 13
+  FontStyle bold
+  FontColor #1A1A2E
+}
+skinparam class {
+  BorderColor #2D4059
+  FontColor #1A1A2E
+  FontSize 10
+  BorderThickness 1
+}
+skinparam arrow {
+  Color #555555
+  FontSize 10
+}
+
+hide empty members
+skinparam classAttributeIconSize 0
+
+title "Diagrama de Entidades — TuLook V2\nModelo de Datos (Firestore)"
+
+top to bottom direction
+
+' ============================================================================
+' ENTIDADES FIRESTORE
+' ============================================================================
+package "Entidades Firestore" #E8F0FE {
+
+  class "User" as User <<Entity>> {
+    + id: string
+    + name: string
+    + email: string
+    + temperature_unit: "C" | "F"
+    + theme: "light" | "dark" | "auto"
+    + notifications: boolean
+    + location_lat: number | null
+    + location_lng: number | null
+    + created_at: Timestamp
+    + updated_at: Timestamp
+  }
+
+  class "Garment" as Garment <<Entity>> {
+    + id: string
+    + user_id: string
+    + name: string
+    + category: enum
+    + color_hex: string
+    + image_url: string | null
+    + emoji: string | null
+    + is_favorite: boolean
+    + season_tags: string[]
+    + times_used: number
+    + last_used_at: Timestamp | null
+    + created_at: Timestamp
+  }
+
+  class "Outfit" as Outfit <<Entity>> {
+    + id: string
+    + user_id: string
+    + name: string
+    + is_automatic: boolean
+    + created_at: Timestamp
+  }
+
+  class "OutfitGarment" as OG <<Entity>> {
+    + id: string
+    + outfit_id: string
+    + garment_id: string
+    + position: number
+    + category_used: string
+  }
+
+  class "DailyOutfit" as DO <<Entity>> {
+    + id: string
+    + user_id: string
+    + outfit_id: string
+    + assigned_date: string
+    + weather_condition: string | null
+    + weather_temp: number | null
+    + was_shown: boolean
+    + created_at: Timestamp
+  }
+
+  class "WeatherCache" as WC <<Entity>> {
+    + id: string
+    + location_key: string
+    + temp_celsius: number
+    + icon_code: string
+    + mapped_ionicon: string
+    + fetched_at: Timestamp
+    + expires_at: string
+  }
+}
+
+' ============================================================================
+' RELACIONES (FK implícitas, mantenidas por el código)
+' ============================================================================
+User "1" -- "*" Garment : posee
+User "1" -- "*" Outfit : crea
+User "1" -- "*" DO : registra
+
+Outfit "1" -- "*" OG : compuesto por
+Garment "1" -- "*" OG : incluida en
+
+Outfit "1" -- "0..1" DO : asignado como
+
+' WeatherCache es independiente (cache de clima por ubicación)
+
+' ============================================================================
+' NOTAS
+' ============================================================================
+note top of User
+  **Colecciones Firestore:**
+  users, garments, outfits,
+  outfit_garments, daily_outfits,
+  weather_cache
+end note
+
+note right of OG
+  **Entidad asociativa**
+  Traduce la relación M:N
+  entre Outfit y Garment.
+end note
+
+legend right
+  == Estereotipos ==
+  <<Entity>> Entidad Firestore
+
+  == Relaciones ==
+  "1" -- "*" Uno a muchos
+  "1" -- "0..1" Uno a cero/uno
+
+  == FK ==
+  Las claves foráneas son
+  implícitas (NoSQL). El
+  código las mantiene
+  mediante campos user_id,
+  outfit_id, garment_id.
+end legend
+
+@enduml

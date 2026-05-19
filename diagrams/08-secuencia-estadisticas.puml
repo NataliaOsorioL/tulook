@@ -1,0 +1,145 @@
+@startuml
+'
+' Diagrama de Secuencia - Estadísticas
+' Basado en StatisticScreen.js
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+
+title "Flujo 5: Estadísticas"
+
+actor "Usuario" as user
+participant "StatisticScreen" as stats
+participant "auth.service" as auth
+participant "garment.service" as gsvc
+participant "outfit.service" as osvc
+database "Firebase\nFirestore" as fb
+
+== Navegación a Estadísticas ==
+
+user -> stats : Selecciona tab "Estadísticas"
+activate stats
+
+stats -> stats : useFocusEffect → loadStats()
+
+stats -> auth : ensureSignedIn()
+activate auth
+auth --> stats : "seed-user-001"
+deactivate auth
+
+== Carga paralela de datos ==
+
+stats -> stats : Promise.all([\n  getGarmentsByUser(userId),\n  getAllUserOutfits(userId)\n])
+
+stats -> gsvc : getGarmentsByUser(userId)
+activate gsvc
+
+gsvc -> fb : query("garments",\nwhere user_id == userId)
+
+fb --> gsvc : Garment[]
+gsvc --> stats : Garment[]
+deactivate gsvc
+
+stats -> osvc : getAllUserOutfits(userId)
+activate osvc
+
+osvc -> fb : query("outfits",\nwhere user_id == userId)
+fb --> osvc : Outfit[]
+
+alt Éxito
+  note right
+    Carga outfit_garments
+    en lotes de 10
+  end
+  osvc -> fb : query("outfit_garments",\nwhere outfit_id in batch) × N
+  fb --> osvc : OutfitGarment[]
+
+  osvc -> gsvc : getGarmentsByIds(allGarmentIds)\n(en lotes de 30)
+  activate gsvc
+  gsvc -> fb : query("garments",\nwhere __name__ in batch) × N
+  fb --> gsvc : Garment[]
+  deactivate gsvc
+
+  osvc -> osvc : Enriquecer outfits\ncon garments[]
+else Fallback (sin orderBy)
+  osvc -> fb : query("outfits",\nwhere user_id == userId)
+  fb --> osvc : Outfit[]
+  osvc -> osvc : sort por created_at en memoria
+end
+
+osvc --> stats : Outfit+[] (enriquecidos)
+deactivate osvc
+
+stats -> stats : setGarments(allGarments)
+stats -> stats : setOutfits(allOutfits)
+
+== Cómputos locales (sin servicios) ==
+
+stats -> stats : computeWeeklyUsage(outfits)
+
+note right
+  Filtra outfits de la
+  semana actual (lun-dom).
+  Agrupa por día de la
+  semana → [L, M, M, J, V, S, D]
+  Retorna: { dayCounts[7],
+  maxVal, total }
+end note
+
+stats -> stats : computeColorDistribution(garments)
+
+note right
+  Agrupa prendas por
+  color_name. Calcula
+  porcentaje sobre total.
+  Retorna: [{ name, count,
+  pct }] ordenado descendente
+end note
+
+stats -> stats : computeForgottenGarments(garments)
+
+note right
+  Filtra prendas sin uso
+  en > 6 meses:
+  last_used_at > 6 meses
+  O times_used === 0
+  Retorna: Garment[]
+end note
+
+== Renderizado ==
+
+stats -> stats : Renderiza:
+note right
+  • Gráfico de barras semanal
+  • Círculo: distribución
+    de colores (top 4)
+  • Lista horizontal:
+    prendas olvidadas
+    (con SafeImage)
+end note
+
+stats --> user : Muestra estadísticas
+deactivate stats
+
+@enduml

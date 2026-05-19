@@ -1,0 +1,215 @@
+@startuml
+'
+' Diagrama de Secuencia - Creación de Outfit (Manual + Automático)
+' Basado en OutfitScreen.js + outfit.service + outfit-generator-v2
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+
+title "Flujo 4: Creación de Outfit"
+
+actor "Usuario" as user
+participant "OutfitScreen" as out
+participant "useGarments" as hook
+participant "auth.service" as auth
+participant "outfit.service" as osvc
+participant "garment.service" as gsvc
+participant "outfit-generator-v2" as gen
+database "Firebase\nFirestore" as fb
+
+== Carga inicial ==
+
+user -> out : Selecciona tab "Crear Outfit"
+activate out
+
+out -> hook : useGarments()
+activate hook
+hook -> auth : ensureSignedIn()
+auth --> hook : userId
+hook -> gsvc : getGarmentsByUser(userId)
+gsvc -> fb : query("garments", where user_id == userId)
+fb --> gsvc : Garment[]
+gsvc --> hook : Garment[]
+hook -> gen : groupByCategory(garments)
+hook --> out : { garmentsByCategory,\nallGarments, isLoading }
+deactivate hook
+
+== Construcción de selección inicial ==
+
+out -> out : useEffect(isInitialized=false)
+note right: Auto-selecciona 1er\nitem de cada categoría.\nEvita combinar DRESS\ncon TOP/BOTTOM
+
+out -> out : setSelectedById({ top: id, bottom: id,\nshoes: id, accessory: id })
+out -> out : setIsInitialized(true)
+
+== Flujo A: SELECCIÓN MANUAL ==
+
+user -> out : Tapa categoría\n(ej: "Parte Superior")
+out -> out : handleCategorySelect(key)\n→ setSelectedCategory(key)
+
+user -> out : Selecciona prenda\nde la lista horizontal
+out -> out : handleGarmentSelect(garmentId)\n→ setSelectedById(prev)
+
+out -> out : Auto-limpieza:\nsi DRESS → elimina TOP/BOTTOM\nsi TOP/BOTTOM → elimina DRESS
+
+out -> gen : validateSelection(selectedById,\ngarmentsByCategory) [useMemo]
+activate gen
+gen --> out : { valid, errors }
+deactivate gen
+
+note right : La validación es continua\n(useMemo). Evalúa:\n- Duplicados por categoría\n- Conflicto DRESS + TOP/BOTTOM\n- Prendas faltantes
+
+user -> out : Tapa "GUARDAR"
+out -> out : handleSave()
+
+== Guardado manual ==
+
+out -> out : buildSelectionList()\n→ list of Garment[]
+
+out -> gen : validateManualSave(list)
+activate gen
+gen --> out : { valid, errors }
+deactivate gen
+
+alt Validación falla
+  out -> user : Alert("Corrige la selección")
+  note right : Retorna sin guardar
+else Validación exitosa
+  out -> auth : ensureSignedIn()
+  activate auth
+  auth --> out : userId
+  deactivate auth
+
+  out -> osvc : saveOutfitManually(userId, list, names)
+  activate osvc
+
+  osvc -> fb : writeBatch()
+  osvc -> fb : batch: setDoc("outfits/{id}",\n{ user_id, name, is_automatic: false })
+  osvc -> fb : batch: setDoc("outfit_garments/{id}",\n{ outfit_id, garment_id, position, category })
+  osvc -> fb : batch: loop x N
+  osvc -> fb : batch.commit()
+  fb --> osvc : ok
+
+  osvc -> gsvc : incrementGarmentUsage(garmentIds)
+  activate gsvc
+  gsvc -> fb : updateDoc × N\n(times_used +1, last_used_at)
+  fb --> gsvc : ok
+  gsvc --> osvc : void
+  deactivate gsvc
+
+  osvc --> out : { success, outfit: { id, name, ... } }
+  deactivate osvc
+
+  out -> user : Alert("¡Outfit guardado!")\n[Ver en Inventario |\nSeguir creando]
+end
+
+== Flujo B: GENERACIÓN AUTOMÁTICA ==
+
+user -> out : Tapa "Generar Automático"
+out -> out : handleAutoGenerate()
+
+out -> gen : canGenerateOutfit(allGarments)
+activate gen
+gen --> out : { allowed, reason }
+deactivate gen
+
+alt Pre-check falla
+  out -> gen : translateOutfitError(reason)
+  activate gen
+  gen --> out : Mensaje usuario
+  deactivate gen
+  out -> user : Alert("No se pudo generar")
+else Pre-check exitoso
+  out -> auth : ensureSignedIn()
+  activate auth
+  auth --> out : userId
+  deactivate auth
+
+  out -> osvc : getRecentOutfitGarmentIds(userId)
+  activate osvc
+  osvc -> fb : query("daily_outfits", where user_id,\nassigned_date >= since)
+  fb --> osvc : DailyOutfit[]
+  osvc -> fb : query("outfit_garments",\nwhere outfit_id in batch)
+  fb --> osvc : OutfitGarment[]
+  osvc --> out : Set<string> (recentGarmentIds)
+  deactivate osvc
+
+  out -> out : Determinar preferredMode\n(alterna dress/top-bottom\npara evitar repetición)
+
+  group Intento 1 (modo preferido)
+    out -> gen : selectDailyOutfitGarments(\ngarments, recentIds, null,\nexcludeIds, preferredMode)
+    activate gen
+
+    gen -> gen : groupByCategory(garments)
+    gen -> gen : Determinar modos disponibles\n(hasDress? hasTopBottom?)
+
+    alt Modo DRESS
+      gen -> gen : pickBody("dress")\n→ selectBest(DRESS)
+      gen -> gen : pickRequired(SHOES)\n→ selectBest(SHOES)
+      gen -> gen : pickRequired(ACCESSORY)\n→ selectBest(ACCESSORY)
+    else Modo TOP-BOTTOM
+      gen -> gen : pickBody("top-bottom")\n→ selectBest(TOP) + selectBest(BOTTOM)
+      gen -> gen : pickRequired(SHOES)
+      gen -> gen : pickRequired(ACCESSORY)
+    end
+
+    note right
+      Cada selectBest usa
+      computeGarmentScore() + jitter
+      aleatorio para variedad.
+    end note
+
+    gen --> out : { garments[], name, description, outfitMode }
+    deactivate gen
+
+    out -> gen : validateOutfit(result) [post-check]
+    activate gen
+    gen --> out : { valid, errors[] }
+    deactivate gen
+  end
+
+  alt Post-check falla (1er intento)
+    group Intento 2 (modo opuesto)
+      out -> gen : selectDailyOutfitGarments(\ngarments, recentIds, null,\nexcludeIds, modoOpuesto)
+      out -> gen : validateOutfit(result)
+    end
+
+    alt Ambos intentos fallan
+      out -> gen : translateOutfitError(rawMsg)
+      out -> user : Alert("No se pudo generar")
+    end
+  end
+
+  alt Generación exitosa
+    out -> out : Construir newSelection{} desde\nresult.garments\n→ setSelectedById(newSelection)
+    out -> out : setHasAutoGenerated(true)
+    out -> out : lastModeRef.current =\nresult.outfitMode
+    note right: UI se actualiza con\nel outfit generado
+  end
+end
+
+out --> user : Muestra preview\ndel outfit generado
+deactivate out
+
+@enduml

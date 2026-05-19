@@ -1,0 +1,179 @@
+@startuml
+'
+' Diagrama de Secuencia - Creación de Prenda
+' Basado en InventoryScreen.js + garment.service + github.service
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+
+title "Flujo 3: Creación de Prenda"
+
+actor "Usuario" as user
+participant "InventoryScreen" as inv
+participant "Expo\nImagePicker" as picker
+participant "useGarments" as hook
+participant "auth.service" as auth
+participant "garment.service" as gsvc
+participant "github.service" as gh
+participant "Expo\nFileSystem" as fs
+database "Firebase\nFirestore" as fb
+boundary "GitHub\nREST API" as ghApi
+
+== Inicio: FAB → Modal ==
+
+user -> inv : Tapa FAB (+)
+activate inv
+
+inv -> inv : handleOpenModal()
+note right : Modal con opciones:\n"Tomar foto" / "Elegir emoji"
+
+== Opción A: Foto ==
+
+user -> inv : Selecciona "Tomar foto"
+activate inv
+inv -> picker : requestCameraPermissionsAsync()
+activate picker
+
+alt Permiso concedido
+  picker --> inv : "granted"
+  inv -> picker : launchCameraAsync({ quality: 0.7 })
+  picker --> inv : { assets[{ uri }] } | canceled
+  alt Foto capturada
+    inv -> inv : pendingGarment = { type: 'photo', uri }
+    inv -> inv : openGarmentForm()
+    note right : Multi-step form\n(3 pasos)
+  end
+else Permiso denegado
+  picker --> inv : "denied"
+  inv -> user : Alert: "Permiso requerido"
+end
+deactivate picker
+
+== Opción B: Emoji ==
+
+user -> inv : Selecciona "Elegir emoji"
+inv -> inv : handleOpenEmojiPicker()
+inv -> inv : Muestra parrilla de emojis\npor categoría
+
+user -> inv : Selecciona emoji
+inv -> inv : pendingGarment = { type: 'emoji', emoji, category }
+inv -> inv : openGarmentForm()
+
+== Formulario multi-paso ==
+
+note right of inv
+  Paso 1: Categoría + Tipo
+  Paso 2: Color (predefinido o HEX)
+  Paso 3: Nombre + Notas
+end note
+
+group Formulario (3 pasos)
+  user -> inv : Completa paso y\ntapa "Siguiente"
+  inv -> inv : setFormStep(n+1)
+end
+
+user -> inv : Tapa "Guardar prenda"
+inv -> inv : saveGarment()
+
+== Procesamiento y guardado ==
+
+inv -> auth : ensureSignedIn()
+activate auth
+auth --> inv : "seed-user-001"
+deactivate auth
+
+alt Tipo: photo
+  inv -> inv : setProcessingLabel("Subiendo imagen...")
+  inv -> gsvc : uploadGarmentImage(userId, uri)
+  activate gsvc
+
+  gsvc -> gh : uploadImageToGitHub(userId, localUri)
+  activate gh
+
+  gh -> fs : readAsStringAsync(uri,\nbase64 encoding)
+  activate fs
+  alt Web
+    fs -> fs : fetch(uri) → blob → FileReader → base64
+  else Mobile
+    fs -> fs : FileSystem.readAsStringAsync()
+  end
+  fs --> gh : base64Content
+  deactivate fs
+
+  gh -> ghApi : PUT /repos/{owner}/{repo}/contents/{path}\n{ message, content: base64, branch }
+  activate ghApi
+  ghApi --> gh : { content: { download_url, sha, path } }
+  deactivate ghApi
+
+  gh --> gsvc : { download_url, sha, path }
+  deactivate gh
+
+  gsvc --> inv : { image_url, github_path, github_sha }
+  deactivate gsvc
+
+  inv -> inv : setProcessingLabel("Guardando prenda...")
+
+  inv -> gsvc : createGarment(userId, { name, category,\ncolor_hex, image_url, github_path, github_sha, ... })
+  activate gsvc
+  gsvc -> fb : addDoc("garments", { user_id, name,\ncategory, color_hex, image_url, ... })
+  fb --> gsvc : DocumentReference
+  gsvc --> inv : { id, ...garmentData }
+  deactivate gsvc
+
+else Tipo: emoji
+  inv -> inv : setProcessingLabel("Guardando prenda...")
+  inv -> gsvc : createGarmentFromEmoji(userId,\nemoji, category, color, subtype, notes)
+  activate gsvc
+  gsvc -> fb : addDoc("garments", { …, image_url:\nnull, emoji, … })
+  fb --> gsvc : DocumentReference
+  gsvc --> inv : { id, ...garmentData }
+  deactivate gsvc
+end
+
+inv -> inv : pendingGarment = null
+
+== Recarga del hook ==
+
+inv -> hook : refresh() (useGarments)
+activate hook
+hook -> auth : ensureSignedIn()
+auth --> hook : userId
+hook -> gsvc : getGarmentsByUser(userId)
+activate gsvc
+gsvc -> fb : query("garments",\nwhere user_id == userId)
+fb --> gsvc : Garment[]
+gsvc --> hook : Garment[]
+deactivate gsvc
+hook -> hook : groupByCategory(garments)
+hook -> hook : setGarmentsByCategory(grouped)
+hook -> hook : setAllGarments(garments)
+deactivate hook
+
+inv -> inv : setShowGarmentForm(false)
+inv -> inv : setIsProcessing(false)
+
+inv --> user : UI actualizada\ncon nueva prenda
+deactivate inv
+
+@enduml

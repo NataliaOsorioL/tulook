@@ -1,0 +1,307 @@
+@startuml
+'
+' Diagrama de Componentes - TuLook V2
+' Arquitectura por capas con dependencias unidireccionales
+' Basado estrictamente en los imports reales del código fuente
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam component {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontSize 11
+  FontColor #1A1A2E
+}
+skinparam database {
+  BorderColor #2D4059
+  BackgroundColor #D6E4F0
+  FontColor #1A1A2E
+}
+skinparam cloud {
+  BorderColor #2D4059
+  BackgroundColor #E8D6F0
+  FontColor #1A1A2E
+}
+skinparam package {
+  BorderColor #1A1A2E
+  BackgroundColor #F5F5F5
+  FontColor #1A1A2E
+  FontSize 13
+  FontStyle bold
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+  MaxWidth 200
+}
+
+title "Diagrama de Componentes — TuLook V2"
+
+top to bottom direction
+
+' =============================================================================
+' LAYER 1: PRESENTACIÓN (UI Layer)
+' =============================================================================
+package "Capa de Presentación" as ui {
+  [App.js] as app
+  [HomeScreen] as homeSc
+  [InventoryScreen] as invSc
+  [OutfitScreen] as outSc
+  [StatisticScreen] as statSc
+  [ConfigurationScreen] as cfgSc
+  [SafeImage] as safeImg
+}
+
+' =============================================================================
+' LAYER 2: ESTADO (State Management)
+' =============================================================================
+package "Manejo de Estado" as state {
+  [useGarments] as hookG
+  [useOutfits] as hookO
+  [ThemeContext] as themeCtx
+}
+
+' =============================================================================
+' LAYER 3: SERVICIOS (Business Logic / Data Access)
+' =============================================================================
+package "Capa de Servicios" as svc {
+  [auth.service] as authSvc
+  [user.service] as uSvc
+  [garment.service] as gSvc
+  [outfit.service] as oSvc
+  [home.service] as homeSvc
+  [weather.service] as wSvc
+  [github.service] as ghSvc
+  [notification.service] as nSvc
+}
+
+' =============================================================================
+' LAYER 4: UTILIDADES Y CONFIGURACIÓN
+' =============================================================================
+package "Utilidades y Configuración" as utils {
+  [constants] as consts
+  [logger] as log
+  [weather-mapper] as wMap
+  [outfit-generator] as genV1
+  [outfit-generator-v2] as genV2
+  [notification-helpers] as nHlpr
+  [firebase.js] as fbCfg
+  [seed.js] as seed
+}
+
+' =============================================================================
+' LAYER 5: SISTEMAS EXTERNOS
+' =============================================================================
+package "Sistemas Externos" as ext {
+  database "Firebase\nFirestore" as fb
+  cloud "GitHub\nREST API" as ghApi
+  cloud "OpenWeatherMap\nAPI" as owmApi
+  component "Expo SDK" as expo {
+    [Notifications]
+    [Location]
+    [ImagePicker]
+    [FileSystem]
+  }
+}
+
+' =============================================================================
+' NOTAS DE ZONAS GRISES Y ACOPLAMIENTO
+' =============================================================================
+note right of homeSvc
+  **Orquestador central**
+  home.service consolida 4 servicios
+  (user + garment + outfit + weather)
+  en una sola respuesta. Alto
+  acoplamiento por composición.
+end note
+
+note left of oSvc
+  **Acoplamiento servicio→servicio**
+  outfit.service depende de
+  garment.service para leer y
+  actualizar prendas directamente.
+  No mediado por hook.
+end note
+
+note right of authSvc
+  **Auth fijo (desarrollo)**
+  ensureSignedIn() siempre retorna
+  EXPO_PUBLIC_FIXED_USER_ID.
+  El perfil se auto-crea si no existe.
+  Sin autenticación real.
+end note
+
+note left of genV1
+  LEGACY
+  (sin uso en la app)
+end note
+
+note right of nSvc
+  **Notificaciones híbridas**
+  Usa AsyncStorage para flag local
+  + Firestore para persistencia
+  remota. Expo Notifications
+  puede no estar disponible en
+  Expo Go (Android).
+end note
+
+note left of gSvc
+  **GitHub como CDN de imágenes**
+  Las fotos de prendas se suben
+  a un repositorio GitHub via
+  Contents API. No usa Firebase
+  Storage.
+end note
+
+' =============================================================================
+' DEPENDENCIAS: APP.JS
+' =============================================================================
+app --> authSvc : ensureSignedIn()
+app --> seed : seedForUser(), validateFirestoreData()
+app --> themeCtx : ThemeProvider, useTheme()
+app --> homeSc
+app --> invSc
+app --> outSc
+app --> statSc
+app --> cfgSc
+
+' =============================================================================
+' DEPENDENCIAS: UI → ESTADO
+' =============================================================================
+homeSc --> themeCtx : useTheme()
+invSc --> themeCtx
+invSc --> hookG : useGarments()
+invSc --> hookO : useOutfits()
+outSc --> hookG : useGarments()
+statSc --> themeCtx
+cfgSc --> themeCtx
+
+' =============================================================================
+' DEPENDENCIAS: UI → SERVICIOS
+' =============================================================================
+homeSc --> homeSvc : getHomeDashboard()
+homeSc --> authSvc : ensureSignedIn()
+invSc --> authSvc : ensureSignedIn()
+outSc --> authSvc : ensureSignedIn()
+outSc --> oSvc : saveOutfitManually()
+statSc --> gSvc : getGarmentsByUser()
+statSc --> oSvc : getAllUserOutfits()
+statSc --> authSvc : ensureSignedIn()
+cfgSc --> authSvc : ensureSignedIn()
+cfgSc --> uSvc : getUserProfile(), updateUserProfile()
+cfgSc --> nSvc : enable(), disable()
+
+' =============================================================================
+' DEPENDENCIAS: UI → UTILIDADES
+' =============================================================================
+homeSc --> log
+invSc --> consts
+outSc --> consts
+outSc --> genV2 : selectDailyOutfitGarments(),
+                  validateOutfitComposition(),
+                  validateManualSave(), canGenerateOutfit()
+outSc --> log
+statSc --> log
+cfgSc --> log
+
+' =============================================================================
+' DEPENDENCIAS: UI → COMPONENTES
+' =============================================================================
+statSc --> safeImg
+cfgSc --> safeImg
+
+' =============================================================================
+' DEPENDENCIAS: ESTADO → SERVICIOS
+' =============================================================================
+hookG --> gSvc : getGarmentsByUser(), deleteGarment(),
+                  deleteAllGarments()
+hookG --> oSvc : deleteAllUserOutfits()
+hookG --> authSvc : ensureSignedIn()
+hookO --> oSvc : getAllUserOutfits(), deleteSingleOutfit(),
+                  deleteAllUserOutfits()
+hookO --> authSvc : ensureSignedIn()
+themeCtx --> uSvc : getUserProfile(), updateUserProfile()
+themeCtx --> authSvc : ensureSignedIn()
+
+' =============================================================================
+' DEPENDENCIAS: ESTADO → UTILIDADES
+' =============================================================================
+hookG --> genV2 : groupByCategory()
+hookG --> log
+hookO --> log
+
+' =============================================================================
+' DEPENDENCIAS: SERVICIO → SERVICIO
+' =============================================================================
+homeSvc --> uSvc : getUserProfile()
+homeSvc --> gSvc : getRecentGarments()
+homeSvc --> oSvc : getOrGenerateDailyOutfit()
+homeSvc --> wSvc : getWeather()
+authSvc --> uSvc : getUserProfile(), createUserProfile()
+oSvc --> gSvc : getGarmentsByUser(), getGarmentsByIds(),
+                incrementGarmentUsage()
+gSvc --> ghSvc : uploadImageToGitHub(), deleteImageFromGitHub()
+nSvc --> uSvc : updateUserProfile()
+nSvc --> authSvc : ensureSignedIn()
+
+' =============================================================================
+' DEPENDENCIAS: SERVICIO → UTILIDADES Y CONFIG
+' =============================================================================
+gSvc --> consts : FIRESTORE_COLLECTIONS
+gSvc --> log
+oSvc --> consts : FIRESTORE_COLLECTIONS
+oSvc --> genV2 : selectDailyOutfitGarments(),
+                  canGenerateOutfit(), getDateString(),
+                  todayString()
+oSvc --> log
+wSvc --> consts : FIRESTORE_COLLECTIONS,
+                  WEATHER_CACHE_TTL_MINUTES
+wSvc --> wMap : mapOwmIconToIonicon(), buildWeatherText(),
+                getDefaultWeather()
+uSvc --> consts : FIRESTORE_COLLECTIONS,
+                  TEMPERATURE_UNITS, THEME_OPTIONS
+ghSvc --> log
+nSvc --> log
+homeSvc --> consts : GARMENT_CATEGORIES_LABELS
+
+seed --> gSvc : getGarmentsByUser(), createGarment()
+seed --> consts : GARMENT_CATEGORIES, SEASON_TAGS,
+                  FIRESTORE_COLLECTIONS
+seed --> log
+seed --> fbCfg : db (Firestore instance)
+
+' =============================================================================
+' DEPENDENCIAS: UTILIDAD → UTILIDAD
+' =============================================================================
+wMap --> consts
+genV2 --> consts
+genV2 --> wMap : getExcludedSeasonTagsForTemperature()
+genV2 --> log
+nHlpr --> nSvc : schedule(), enable(), disable()
+nHlpr --> log
+
+' =============================================================================
+' DEPENDENCIAS: EXTERNAS
+' =============================================================================
+fbCfg --> fb : Firestore SDK (lectura/escritura)
+
+gSvc --> fbCfg : db (Firestore instance)
+oSvc --> fbCfg : db
+wSvc --> fbCfg : db
+uSvc --> fbCfg : db
+
+ghSvc --> ghApi : PUT/DELETE Contents API
+wSvc --> owmApi : GET /data/2.5/weather
+
+nSvc --> expo : Notifications API
+ghSvc --> expo : FileSystem (base64 encoding)
+homeSc --> expo : Location API
+invSc --> expo : ImagePicker API
+
+@enduml

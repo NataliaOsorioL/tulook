@@ -1,0 +1,186 @@
+@startuml
+'
+' Diagrama de Secuencia - Dashboard Principal
+' Basado en HomeScreen.js + home.service + servicios
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+}
+
+title "Flujo 2: Dashboard Principal"
+
+actor "Usuario" as user
+participant "HomeScreen" as home
+participant "auth.service" as auth
+participant "Expo\nLocation" as loc
+participant "home.service" as homeSvc
+participant "user.service" as usvc
+participant "weather.service" as wsvc
+participant "outfit.service" as osvc
+participant "garment.service" as gsvc
+participant "outfit-generator-v2" as gen
+database "Firebase\nFirestore" as fb
+boundary "OpenWeatherMap\nAPI" as owm
+
+== Navegación a Home ==
+
+user -> home : Selecciona tab "Inicio"
+activate home
+
+home -> home : useFocusEffect → loadDashboard()
+
+home -> auth : ensureSignedIn()
+activate auth
+auth --> home : "seed-user-001"
+deactivate auth
+
+home -> loc : requestForegroundPermissionsAsync()
+activate loc
+alt Permiso concedido
+  loc --> home : "granted"
+  home -> loc : getCurrentPositionAsync({ accuracy: Low })
+  loc --> home : { coords: { latitude, longitude } }
+else Permiso denegado
+  loc --> home : "denied"
+  note right : location = null
+end
+deactivate loc
+
+home -> homeSvc : getHomeDashboard(userId,\nlocation)
+activate homeSvc
+
+homeSvc -> usvc : getUserProfile(userId)
+activate usvc
+usvc -> fb : getDoc("users/{uid}")
+fb --> usvc : { name, temperature_unit, ... }
+usvc --> homeSvc : UserProfile
+deactivate usvc
+
+alt location disponible
+  homeSvc -> wsvc : getWeather(lat, lng, unit)
+  activate wsvc
+
+  wsvc -> wsvc : getCachedWeather(lat, lng)
+  wsvc -> fb : query("weather_cache",\nwhere location_key == key)
+  fb --> wsvc : WeatherCache | null
+
+  alt Cache válido (no expirado)
+    note right : Usa datos cacheados
+    wsvc --> homeSvc : { icon, temperature, text, cached: true }
+  else Cache expirado o inexistente
+    wsvc -> owm : GET /data/2.5/weather\n?lat=&lon=&appid=&lang=es&units=metric
+    activate owm
+    owm --> wsvc : { weather[], main.temp }
+    deactivate owm
+
+    wsvc -> wsvc : parseOwmResponse(data)\n→ mapOwmIconToIonicon(iconCode)
+    wsvc -> fb : updateDoc | addDoc\n("weather_cache", parsed)
+    fb --> wsvc : ok
+
+    wsvc --> homeSvc : { icon, temperature, text, cached: false }
+  end
+  deactivate wsvc
+else location no disponible
+  note right : weather = null
+end
+
+homeSvc -> osvc : getOrGenerateDailyOutfit(userId,\nweatherData)
+activate osvc
+
+osvc -> osvc : todayString()
+osvc -> osvc : getDailyOutfit(userId, today)
+osvc -> fb : query("daily_outfits",\nwhere user_id == userId,\nwhere assigned_date == today)
+fb --> osvc : DailyOutfit[]
+
+alt Ya existe outfit para hoy
+  osvc -> osvc : getOutfitWithGarments(existing.outfit_id)
+  osvc -> fb : getDoc("outfits/{outfitId}")
+  fb --> osvc : Outfit
+  osvc -> fb : query("outfit_garments",\nwhere outfit_id == outfitId)
+  fb --> osvc : OutfitGarment[]
+  osvc -> gsvc : getGarmentsByIds(garmentIds)
+  activate gsvc
+  gsvc -> fb : query("garments",\nwhere __name__ in batch)
+  fb --> gsvc : Garment[]
+  gsvc --> osvc : Garment[]
+  deactivate gsvc
+  osvc --> homeSvc : { isNew: false, outfit: Outfit+ }
+else No existe outfit
+  osvc -> gsvc : getGarmentsByUser(userId)
+  activate gsvc
+  gsvc -> fb : query("garments", where user_id == userId)
+  fb --> gsvc : Garment[]
+  gsvc --> osvc : Garment[]
+  deactivate gsvc
+
+  osvc -> gen : canGenerateOutfit(allGarments)
+  alt No se puede generar
+    osvc --> homeSvc : { success: false, reason, outfit: null }
+  else Puede generar
+    osvc -> osvc : getRecentOutfitGarmentIds(userId)
+    osvc -> fb : query("daily_outfits", where user_id, >= since)
+    fb --> osvc : DailyOutfit[]
+    osvc -> fb : query("outfit_garments",\nwhere outfit_id in batch)
+    fb --> osvc : OutfitGarment[]
+
+    osvc -> gen : selectDailyOutfitGarments(\ngarments, recentIds, temp)
+    activate gen
+    gen -> gen : groupByCategory(garments)
+    gen -> gen : Determinar modo\n(dress vs top-bottom)
+    gen -> gen : Para cada categoría:\ncomputeGarmentScore() + Random jitter
+    gen -> gen : Seleccionar mejor prenda\npor categoría
+    gen --> osvc : { garments[], name, description }
+    deactivate gen
+
+    osvc -> osvc : writeBatch(fb)
+    osvc -> fb : batch: setDoc("outfits/{id}", ...)
+    osvc -> fb : batch: setDoc("outfit_garments/{id}", ...)
+    osvc -> fb : batch: setDoc("daily_outfits/{id}", ...)
+    osvc -> fb : batch.commit()
+    fb --> osvc : ok
+
+    osvc -> gsvc : incrementGarmentUsage(garmentIds)
+    gsvc -> fb : updateDoc (times_used + 1,\nlast_used_at) × N
+    fb --> gsvc : ok
+
+    osvc --> homeSvc : { success: true, outfit: Outfit+ }
+  end
+end
+deactivate osvc
+
+homeSvc -> gsvc : getRecentGarments(userId, 3)
+activate gsvc
+gsvc -> fb : query("garments",\nwhere user_id == userId, limit 3)
+fb --> gsvc : Garment[]
+gsvc --> homeSvc : Garment[]
+deactivate gsvc
+
+homeSvc --> home : { user, weather,\noutfit_of_the_day,\nrecent_garments }
+deactivate homeSvc
+
+home -> home : setDashboardData(data)\n→ Renderiza UI
+
+home --> user : Muestra clima,\noutfit del día,\nprendas recientes
+deactivate home
+
+@enduml

@@ -1,0 +1,130 @@
+@startuml
+'
+' Diagrama de Secuencia - Creación de Outfit Manual
+' Basado en OutfitScreen.js: selección manual + validación + guardado
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+
+title "Flujo 4a: Creación de Outfit — Manual"
+caption "Selección por categorías + guardado en Firestore"
+
+actor "Usuario" as user
+participant "OutfitScreen" as out
+participant "useGarments" as hook
+participant "auth.service" as auth
+participant "outfit.service" as osvc
+participant "garment.service" as gsvc
+participant "outfit-generator-v2" as gen
+database "Firebase\nFirestore" as fb
+
+== Carga inicial ==
+
+user -> out : Navega a "Crear Outfit"
+activate out
+
+out -> hook : useGarments()
+activate hook
+hook --> out : { garmentsByCategory,\nallGarments, isLoading }
+deactivate hook
+
+out -> out : useEffect (isInitialized=false)
+note right: Selecciona 1er item\nde TOP, BOTTOM, SHOES,\nACCESSORY. Resuelve\nconflicto DRESS vs TOP/BOTTOM.
+out -> out : setSelectedById(init)
+out -> out : setIsInitialized(true)
+
+== Selección manual por categorías ==
+
+loop Hasta que el usuario esté satisfecho
+  user -> out : Tapa categoría\n(ej: "Parte Superior")
+  out -> out : handleCategorySelect(key)\n→ setSelectedCategory(key)
+
+  user -> out : Selecciona prenda\nde lista horizontal
+  out -> out : handleGarmentSelect(id)
+  note right
+    Auto-limpieza:
+    · Si DRESS → quita TOP/BOTTOM
+    · Si TOP/BOTTOM → quita DRESS
+  end note
+  out -> out : setSelectedById(prev)
+end
+
+out -> gen : validateSelection(selectedById,\ngarmentsByCategory) [useMemo]
+activate gen
+alt Modo DRESS
+  gen -> gen : Verifica DRESS + SHOES\n+ ACCESSORY
+  note right: TOP y BOTTOM\ndeben estar vacíos
+else Modo TOP-BOTTOM
+  gen -> gen : Verifica TOP + BOTTOM\n+ SHOES + ACCESSORY
+  note right: DRESS debe\nestar vacío
+end
+gen --> out : { valid, errors[] }
+deactivate gen
+
+note right : Validación continua\n(re-evalúa en cada\ncambio de selección)
+
+== Guardado ==
+
+user -> out : Tapa "GUARDAR"
+out -> out : handleSave()
+
+out -> out : buildSelectionList()\n→ Garment[]
+
+out -> gen : validateManualSave(list)
+activate gen
+gen --> out : { valid, errors[] }
+deactivate gen
+
+alt Falló validación
+  out -> user : Alert("Corrige la selección")
+  note right : No guarda
+else Validación exitosa
+  out -> auth : ensureSignedIn()
+  activate auth
+  auth --> out : userId
+  deactivate auth
+
+  out -> osvc : saveOutfitManually(userId, list, name)
+  activate osvc
+
+  osvc -> fb : writeBatch()
+  osvc -> fb : batch.set("outfits/{id}",\n{ user_id, name, is_automatic: false })
+  osvc -> fb : batch.set("outfit_garments/{id}",\n{ outfit_id, garment_id, position,\n  category_used })
+  loop Por cada prenda seleccionada
+    osvc -> fb : batch.set(...)
+  end
+  osvc -> fb : batch.commit()
+  fb --> osvc : ok
+
+  osvc -> gsvc : incrementGarmentUsage(garmentIds)
+  activate gsvc
+  gsvc -> fb : updateDoc × N
+  fb --> gsvc : ok
+  gsvc --> osvc : void
+  deactivate gsvc
+
+  osvc --> out : { success, outfit }
+  deactivate osvc
+
+  out -> user : Alert("¡Outfit guardado!")\n[Ver en Inventario |\nSeguir creando]
+end
+
+deactivate out
+
+@enduml

@@ -1,0 +1,446 @@
+@startuml
+'
+' Diagrama de Clases / Entidades - TuLook V2
+'
+' NOTA: Este proyecto usa JavaScript funcional (no OOP).
+' Las "clases" representan entidades de datos (Firestore),
+' módulos de servicio (funciones exportadas), hooks, contexto
+' y utilidades — con sus dependencias reales.
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam class {
+  BorderColor #2D4059
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam package {
+  BorderColor #1A1A2E
+  BackgroundColor #F5F5F5
+  FontColor #1A1A2E
+  FontSize 13
+  FontStyle bold
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+skinparam note {
+  BorderColor #E6B800
+  BackgroundColor #FFF8DC
+  FontSize 10
+  MaxWidth 200
+}
+
+hide empty members
+skinparam classAttributeIconSize 0
+
+title "Diagrama de Clases y Módulos — TuLook V2"
+
+top to bottom direction
+
+' =============================================================================
+' ENTIDADES DE DATOS (Firestore)
+' =============================================================================
+package "Entidades Firestore" as entities {
+
+  class "User" as User <<Entity>> {
+    + id: string
+    + name: string
+    + email: string
+    + avatar_url: string | null
+    + temperature_unit: "C" | "F"
+    + theme: "light" | "dark" | "auto"
+    + notifications: boolean
+    + location_lat: number | null
+    + location_lng: number | null
+    + created_at: Timestamp
+    + updated_at: Timestamp
+  }
+
+  class "Garment" as Garment <<Entity>> {
+    + id: string
+    + user_id: string
+    + name: string
+    + category: "top" | "bottom" | "dress" | "shoes" | "accessory"
+    + subtype: string | null
+    + color_hex: string
+    + color_name: string | null
+    + notes: string | null
+    + size: string | null
+    + quantity: number
+    + image_url: string | null
+    + github_path: string | null
+    + github_sha: string | null
+    + emoji: string | null
+    + is_favorite: boolean
+    + season_tags: string[]
+    + times_used: number
+    + last_used_at: Timestamp | null
+    + created_at: Timestamp
+    + updated_at: Timestamp
+  }
+
+  class "Outfit" as Outfit <<Entity>> {
+    + id: string
+    + user_id: string
+    + name: string
+    + is_automatic: boolean
+    + created_at: Timestamp
+    + updated_at: Timestamp
+  }
+
+  class "OutfitGarment" as OG <<Entity>> {
+    + id: string
+    + outfit_id: string
+    + garment_id: string
+    + position: number
+    + category_used: string
+  }
+
+  class "DailyOutfit" as DO <<Entity>> {
+    + id: string
+    + user_id: string
+    + outfit_id: string
+    + assigned_date: string (YYYY-MM-DD)
+    + weather_condition: string | null
+    + weather_temp: number | null
+    + weather_icon: string | null
+    + was_shown: boolean
+    + created_at: Timestamp
+  }
+
+  class "WeatherCache" as WC <<Entity>> {
+    + id: string
+    + location_key: string ("lat_lng")
+    + condition: string
+    + description: string
+    + temp_celsius: number
+    + icon_code: string
+    + mapped_ionicon: string
+    + fetched_at: Timestamp
+    + expires_at: string (ISO)
+  }
+}
+
+' =============================================================================
+' RELACIONES ENTRE ENTIDADES
+' =============================================================================
+User "1" -- "*" Garment : "user_id (FK implícita)"
+User "1" -- "*" Outfit : "user_id (FK implícita)"
+User "1" -- "*" DO : "user_id (FK implícita)"
+Outfit "1" -- "*" OG : "outfit_id (FK implícita)"
+Garment "1" -- "*" OG : "garment_id (FK implícita)"
+Outfit "1" -- "0..1" DO : "outfit_id (FK implícita)"
+
+note right of OG
+  **Entidad asociativa**
+  Traduce la relación M:N
+  entre Outfit y Garment.
+end note
+
+note left of entities
+  **Esquemas implícitos**
+  Firestore no impone esquemas
+  fijos. Estas estructuras se
+  definen en tiempo de escritura
+  desde los servicios.
+  (@ garment.service.js:44-64,
+    outfit.service.js:194-200,
+    user.service.js:9-19)
+end note
+
+' =============================================================================
+' MÓDULOS DE SERVICIO (funciones exportadas)
+' =============================================================================
+package "Servicios" as services {
+
+  class "auth.service" as Auth <<Service>> {
+    + {static} initAuth() : void
+    + {static} ensureSignedIn() : Promise<string>
+    + {static} getCurrentUserId() : string
+  }
+
+  class "user.service" as USvc <<Service>> {
+    + {static} createUserProfile(uid, data) : Promise<User>
+    + {static} getUserProfile(uid) : Promise<User | null>
+    + {static} updateUserProfile(uid, updates) : Promise<User>
+  }
+
+  class "garment.service" as GSvc <<Service>> {
+    + {static} getGarmentsByUser(userId, opts?) : Promise<Garment[]>
+    + {static} getRecentGarments(userId, max?) : Promise<Garment[]>
+    + {static} getGarmentsByIds(ids) : Promise<Garment[]>
+    + {static} createGarment(userId, data) : Promise<Garment>
+    + {static} createGarmentFromEmoji(...) : Promise<Garment>
+    + {static} uploadGarmentImage(userId, uri) : Promise<UploadResult>
+    + {static} incrementGarmentUsage(ids) : Promise<void>
+    + {static} deleteGarment(garmentId) : Promise<void>
+    + {static} deleteAllGarments(userId) : Promise<number>
+  }
+
+  class "outfit.service" as OSvc <<Service>> {
+    + {static} getDailyOutfit(userId, date?) : Promise<DailyOutfit | null>
+    + {static} getRecentOutfitGarmentIds(userId, days?) : Promise<Set<string>>
+    + {static} getOutfitWithGarments(outfitId) : Promise<Outfit+ | null>
+    + {static} getAllUserOutfits(userId) : Promise<Outfit+[]>
+    + {static} generateAndSaveDailyOutfit(userId, weather?) : Promise<GenResult>
+    + {static} saveOutfitManually(userId, garments, name) : Promise<SaveResult>
+    + {static} getOrGenerateDailyOutfit(userId, weather?) : Promise<DailyResult>
+    + {static} deleteAllUserOutfits(userId) : Promise<DeleteResult>
+    + {static} deleteSingleOutfit(outfitId) : Promise<DeleteResult>
+  }
+
+  class "home.service" as Home <<Service>> {
+    + {static} getHomeDashboard(userId, loc?, unit?) : Promise<HomeDashboard>
+  }
+
+  class "weather.service" as WSvc <<Service>> {
+    + {static} setWeatherApiKey(key) : void
+    + {static} getCachedWeather(lat, lng) : Promise<WeatherCache | null>
+    + {static} getWeather(lat, lng, unit?) : Promise<WeatherResponse>
+  }
+
+  class "github.service" as GH <<Service>> {
+    + {static} verifyGitHubSetup() : Promise<VerifyResult>
+    + {static} uploadImageToGitHub(userId, uri) : Promise<UploadResult>
+    + {static} deleteImageFromGitHub(path, sha) : Promise<void>
+    + {static} getPublicImageUrl(githubPath) : string | null
+  }
+
+  class "notification.service" as NSvc <<Service>> {
+    + {static} isEnabled() : boolean
+    + {static} setupChannel() : Promise<void>
+    + {static} requestPermission() : Promise<boolean>
+    + {static} loadPersistedFlag() : Promise<boolean>
+    + {static} setEnabled(value) : Promise<void>
+    + {static} enable() : Promise<void>
+    + {static} disable() : Promise<void>
+    + {static} schedule(title, body, trigger) : Promise<void>
+    + {static} TEMPLATES : Object
+  }
+}
+
+' =============================================================================
+' DEPENDENCIAS ENTRE SERVICIOS
+' =============================================================================
+Auth ..> USvc : getUserProfile(), createUserProfile()
+Home ..> USvc : getUserProfile()
+Home ..> GSvc : getRecentGarments()
+Home ..> OSvc : getOrGenerateDailyOutfit()
+Home ..> WSvc : getWeather()
+OSvc ..> GSvc : getGarmentsByUser(), getGarmentsByIds(),\nincrementGarmentUsage()
+GSvc ..> GH : uploadImageToGitHub(), deleteImageFromGitHub()
+NSvc ..> USvc : updateUserProfile()
+NSvc ..> Auth : ensureSignedIn()
+
+' =============================================================================
+' HOOKS
+' =============================================================================
+package "Hooks y Contexto" as hooks {
+
+  class "useGarments" as useG <<Hook>> {
+    + {static} useGarments()
+    -- Retorna --
+    + garmentsByCategory: { [category]: Garment[] }
+    + allGarments: Garment[]
+    + isLoading: boolean
+    + error: string | null
+    + refresh() : Promise<void>
+    + deleteGarment(id) : Promise<void>
+    + deleteAllGarments() : Promise<void>
+  }
+
+  class "useOutfits" as useO <<Hook>> {
+    + {static} useOutfits()
+    -- Retorna --
+    + outfits: Outfit+[]
+    + isLoading: boolean
+    + isDeleting: boolean
+    + error: string | null
+    + refresh() : Promise<void>
+    + deleteOutfit(id) : Promise<void>
+    + deleteAllOutfits() : Promise<void>
+  }
+
+  class "ThemeContext" as TCtx <<Context>> {
+    + {static} ThemeProvider({ children }) : JSX
+    + {static} useTheme()
+    -- Provee --
+    + themeMode: string
+    + resolved: "light" | "dark"
+    + colors: { [token]: string }
+    + setThemeMode(mode) : Promise<void>
+  }
+
+  class "themes" as Themes <<Module>> {
+    + {static} lightColors : ColorPalette
+    + {static} darkColors : ColorPalette
+  }
+}
+
+' =============================================================================
+' DEPENDENCIAS: HOOKS → SERVICIOS
+' =============================================================================
+useG ..> GSvc : getGarmentsByUser(), deleteGarment(),\ndeleteAllGarments()
+useG ..> OSvc : deleteAllUserOutfits()
+useG ..> Auth : ensureSignedIn()
+useO ..> OSvc : getAllUserOutfits(), deleteSingleOutfit(),\ndeleteAllUserOutfits()
+useO ..> Auth : ensureSignedIn()
+TCtx ..> USvc : getUserProfile(), updateUserProfile()
+TCtx ..> Auth : ensureSignedIn()
+TCtx ..> Themes : lightColors, darkColors
+
+' =============================================================================
+' UTILIDADES
+' =============================================================================
+package "Utilidades" as utils {
+
+  class "constants" as Const <<Module>> {
+    + {static} GARMENT_CATEGORIES : Enum
+    + {static} GARMENT_CATEGORIES_LABELS : { [cat]: string }
+    + {static} TEMPERATURE_UNITS : Enum
+    + {static} THEME_OPTIONS : Enum
+    + {static} SEASON_TAGS : Enum
+    + {static} FIRESTORE_COLLECTIONS : { [name]: string }
+    + {static} CATEGORY_ORDER : string[]
+    + {static} SCORING_WEIGHTS : ScoreWeights
+    + {static} DAILY_OUTFIT_RULES : Rules
+    + {static} WEATHER_CACHE_TTL_MINUTES : number
+  }
+
+  class "logger" as Log <<Module>> {
+    + {static} info(...msg) : void
+    + {static} debug(...msg) : void
+    + {static} warn(...msg) : void
+    + {static} error(...msg) : void
+  }
+
+  class "weather-mapper" as WMap <<Module>> {
+    + {static} mapOwmIconToIonicon(code) : string
+    + {static} buildWeatherText(desc, temp, unit) : string
+    + {static} getDefaultWeather() : WeatherResponse
+    + {static} getExcludedSeasonTagsForTemperature(temp) : string[]
+  }
+
+  class "outfit-generator-v2" as GenV2 <<Module>> {
+    + {static} selectDailyOutfitGarments(g, recentIds, temp, exclude?, mode?) : OutfitGenResult
+    + {static} canGenerateOutfit(garments) : { allowed, reason }
+    + {static} validateOutfit(result) : { valid, errors }
+    + {static} validateOutfitComposition(selected) : { valid, errors }
+    + {static} validateManualSave(selected) : { valid, errors }
+    + {static} validateSelection(selectedById, byCategory) : { valid, errors }
+    + {static} translateOutfitError(error) : string
+    + {static} generateOutfitName(garments) : string
+    + {static} groupByCategory(garments) : { [cat]: Garment[] }
+    + {static} computeGarmentScore(g, recentIds, temp) : number
+    + {static} getDateString(date?) : string
+    + {static} todayString() : string
+    + {static} CATEGORY_ORDER : string[]
+  }
+
+  class "outfit-generator" as GenV1 <<Module>> {
+    note "LEGACY — sin uso en la app"
+  }
+
+  class "notification-helpers" as NHlpr <<Module>> {
+    + {static} scheduleDailyOutfitReminder(time?) : Promise<void>
+    + {static} scheduleWeeklyStatsReminder(day?, time?) : Promise<void>
+    + {static} cancelAllScheduled() : Promise<void>
+  }
+}
+
+' =============================================================================
+' DEPENDENCIAS: UTILIDADES
+' =============================================================================
+GenV2 ..> Const : GARMENT_CATEGORIES, SCORING_WEIGHTS,\nSEASON_TAGS, DAILY_OUTFIT_RULES
+GenV2 ..> WMap : getExcludedSeasonTagsForTemperature()
+GenV2 ..> Log
+WMap ..> Const : GARMENT_CATEGORIES, SEASON_TAGS
+NHlpr ..> NSvc : schedule(), enable(), disable()
+NHlpr ..> Log
+
+' =============================================================================
+' CONFIGURACIÓN
+' =============================================================================
+package "Configuración y Datos" as config {
+
+  class "firebase.js" as FbCfg <<Config>> {
+    + {static} db : Firestore (instancia)
+    -- Inicializa --
+    + Firebase App con credenciales.env
+  }
+
+  class "seed.js" as Seed <<Module>> {
+    + {static} SEED_GARMENTS : GarmentTemplate[] (9 prendas)
+    + {static} hasExistingGarments(userId) : Promise<boolean>
+    + {static} seedForUser(userId) : Promise<SeedResult>
+    + {static} validateFirestoreData(userId) : Promise<ValidationCheck[]>
+  }
+}
+
+' =============================================================================
+' DEPENDENCIAS: SERVICIOS → CONFIG/UTILIDADES
+' =============================================================================
+GSvc ..> FbCfg : db (Firestore)
+OSvc ..> FbCfg : db
+WSvc ..> FbCfg : db
+USvc ..> FbCfg : db
+
+GSvc ..> Const : FIRESTORE_COLLECTIONS
+OSvc ..> Const : FIRESTORE_COLLECTIONS
+WSvc ..> Const : FIRESTORE_COLLECTIONS, WEATHER_CACHE_TTL_MINUTES
+USvc ..> Const : FIRESTORE_COLLECTIONS, TEMPERATURE_UNITS,\nTHEME_OPTIONS
+Home ..> Const : GARMENT_CATEGORIES_LABELS
+
+WSvc ..> WMap : mapOwmIconToIonicon(), buildWeatherText(),\ngetDefaultWeather()
+OSvc ..> GenV2 : selectDailyOutfitGarments(),\ncanGenerateOutfit(), getDateString(), todayString()
+
+GSvc ..> Log
+OSvc ..> Log
+WSvc ..> Log
+GH ..> Log
+
+Seed ..> GSvc : getGarmentsByUser(), createGarment()
+Seed ..> Const : GARMENT_CATEGORIES, SEASON_TAGS,\nFIRESTORE_COLLECTIONS
+Seed ..> FbCfg : db (Firestore)
+
+' =============================================================================
+' DEPENDENCIAS: HOOKS → UTILIDADES
+' =============================================================================
+useG ..> GenV2 : groupByCategory()
+useG ..> Log
+useO ..> Log
+
+' =============================================================================
+' NOTAS SOBRE INCONSISTENCIAS ESTRUCTURALES
+' =============================================================================
+note top of services
+  **Inconsistencias estructurales:**
+  1. auth.service y user.service tienen
+     dependencia circular funcional:
+     auth → user (crear/leer perfil) y
+     notification → user + auth
+  2. outfit.service depende de
+     garment.service (acoplamiento
+     entre servicios del mismo nivel)
+  3. home.service es un orquestador
+     que acopla 4 servicios en una
+     sola función (getHomeDashboard)
+  4. Los hooks (useGarments, useOutfits)
+     implementan optimist UI: actualizan
+     estado local ANTES de la operación
+     remota, con rollback en error
+end note
+
+note top of entities
+  **Relaciones inferidas por el código:**
+  Firestore no tiene foreign keys
+  reales. Las relaciones se mantienen
+  mediante campos user_id, outfit_id,
+  garment_id que el código asigna
+  explícitamente al escribir.
+end note
+
+@enduml

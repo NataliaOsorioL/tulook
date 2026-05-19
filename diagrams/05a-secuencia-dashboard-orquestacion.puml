@@ -1,0 +1,122 @@
+@startuml
+'
+' Diagrama de Secuencia - Dashboard: Orquestación
+' Flujo principal desde HomeScreen hasta home.service
+' La generación del outfit se detalla en 05b-secuencia-dashboard-generacion.puml
+'
+
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam participant {
+  BorderColor #2D4059
+  BackgroundColor #EAEAEA
+  FontColor #1A1A2E
+  FontSize 11
+}
+skinparam actor {
+  BorderColor #1A1A2E
+  FontColor #1A1A2E
+  FontSize 13
+}
+skinparam arrow {
+  Color #555555
+  FontSize 9
+}
+
+title "Flujo 2a: Dashboard — Orquestación"
+caption "HomeScreen → home.service (vista de alto nivel)"
+
+actor "Usuario" as user
+participant "HomeScreen" as home
+participant "auth.service" as auth
+participant "Expo Location" as loc
+participant "home.service" as homeSvc
+participant "user.service" as usvc
+participant "weather.service" as wsvc
+participant "outfit.service" as osvc
+participant "garment.service" as gsvc
+database "Firebase\nFirestore" as fb
+boundary "OpenWeatherMap" as owm
+
+== Carga del Dashboard ==
+
+user -> home : Navega a "Inicio"
+activate home
+
+home -> home : useFocusEffect\n→ loadDashboard()
+
+home -> auth : ensureSignedIn()
+activate auth
+auth --> home : "seed-user-001"
+deactivate auth
+
+group Obtener ubicación [opcional]
+  home -> loc : requestForegroundPermissionsAsync()
+  activate loc
+  alt Con permiso
+    loc --> home : "granted"
+    home -> loc : getCurrentPositionAsync()
+    loc --> home : { latitude, longitude }
+  else Sin permiso
+    loc --> home : "denied"
+  end
+  deactivate loc
+end
+
+home -> homeSvc : getHomeDashboard(userId, location)
+activate homeSvc
+
+  homeSvc -> usvc : getUserProfile(userId)
+  activate usvc
+  usvc -> fb : getDoc("users/{uid}")
+  fb --> usvc : User
+  usvc --> homeSvc : UserProfile
+  deactivate usvc
+
+  homeSvc -> wsvc : getWeather(lat, lng, unit)
+  activate wsvc
+  wsvc -> fb : getCachedWeather(lat, lng)
+  fb --> wsvc : WeatherCache | null
+  alt Cache válido
+    wsvc --> homeSvc : { cached: true, ... }
+  else Cache expirado o miss
+    wsvc -> owm : GET /data/2.5/weather
+    owm --> wsvc : { weather, main }
+    wsvc -> fb : saveWeatherCache(locationKey, data)
+    fb --> wsvc : ok
+    wsvc --> homeSvc : { cached: false, ... }
+  end
+  deactivate wsvc
+
+  homeSvc -> osvc : getOrGenerateDailyOutfit(userId, weather)
+  activate osvc
+  note right
+    **Flujo detallado en:**
+    05b-secuencia-dashboard-generacion.puml
+  end note
+  osvc --> homeSvc : OutfitResult
+  deactivate osvc
+
+  homeSvc -> gsvc : getRecentGarments(userId, 3)
+  activate gsvc
+  gsvc -> fb : query("garments",\nwhere user_id, limit 3)
+  fb --> gsvc : Garment[]
+  gsvc --> homeSvc : Garment[]
+  deactivate gsvc
+
+homeSvc --> home : { user, weather,\noutfit_of_the_day,\nrecent_garments }
+deactivate homeSvc
+
+home -> home : Renderiza:\n· Clima actual\n· Outfit del día\n· Prendas recientes
+
+home --> user : Dashboard visible
+deactivate home
+
+legend right
+  == Convenciones ==
+  group ... end group  → Opcional
+  alt / else           → Bifurcación
+  note right           → Referencia externa
+end legend
+
+@enduml
