@@ -5,9 +5,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AppNavigator from './src/navigation/AppNavigator';
+
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
+
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
@@ -20,25 +23,64 @@ function RootNavigator() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#529bd6" />
+        <ActivityIndicator
+          size="large"
+          color="#529bd6"
+        />
       </View>
     );
   }
 
   return (
     <>
-      <StatusBar style={colors.background === '#121212' ? 'light' : 'dark'} />
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <StatusBar
+        style={
+          colors.background === '#121212'
+            ? 'light'
+            : 'dark'
+        }
+      />
+
+      <RootStack.Navigator
+        screenOptions={{ headerShown: false }}
+      >
         {isAuthenticated ? (
+
           <RootStack.Group navigationKey="authenticated">
-            <RootStack.Screen name="HomeTabs" component={AppNavigator} />
+
+            <RootStack.Screen
+              name="HomeTabs"
+              component={AppNavigator}
+            />
+
+            <RootStack.Screen
+              name="EditProfile"
+              component={EditProfileScreen}
+            />
+
           </RootStack.Group>
+
         ) : (
+
           <RootStack.Group navigationKey="guest">
-            <RootStack.Screen name="Login" component={LoginScreen} />
-            <RootStack.Screen name="Register" component={RegisterScreen} />
-            <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+            <RootStack.Screen
+              name="Login"
+              component={LoginScreen}
+            />
+
+            <RootStack.Screen
+              name="Register"
+              component={RegisterScreen}
+            />
+
+            <RootStack.Screen
+              name="ForgotPassword"
+              component={ForgotPasswordScreen}
+            />
+
           </RootStack.Group>
+
         )}
       </RootStack.Navigator>
     </>
