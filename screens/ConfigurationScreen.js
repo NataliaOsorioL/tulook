@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, ActivityIndicator, Alert, Platform,
+  View, Text, StyleSheet, TextInput, TouchableOpacity, Switch, ScrollView, ActivityIndicator, Alert, Modal, Platform,
 } from 'react-native';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import SafeImage from '../src/components/SafeImage';
 import { logger } from '../src/utils/logger';
 import { getUserProfile, updateUserProfile } from '../src/services/user.service';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +14,8 @@ import { loadPersistedFlag, setupChannel, enable, disable } from '../src/service
 
 export default function SettingsScreen() {
   const { themeMode, setThemeMode, colors } = useTheme();
-  const { logout, userId } = useAuth();
+  const navigation = useNavigation();
+  const { logout, userId, changePassword } = useAuth();
   const insets = useSafeAreaInsets();
   const themedStyles = useMemo(() => getStyles(colors, insets), [colors, insets]);
   const [profile, setProfile] = useState(null);
@@ -22,6 +24,11 @@ export default function SettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -121,16 +128,54 @@ export default function SettingsScreen() {
   };
 
   const handleEditProfile = () => {
+    navigation.navigate('EditProfile');
   };
 
   const handleChangePassword = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!currentPassword) {
+      Alert.alert('Campo requerido', 'Ingresa tu contraseña actual.');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert('Contraseña nueva', 'La nueva contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'Las contraseñas nuevas no coinciden.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setShowPasswordModal(false);
+      Alert.alert('Éxito', 'Contraseña actualizada correctamente.');
+    } catch (err) {
+      const msg = err.code === 'auth/wrong-password'
+        ? 'La contraseña actual es incorrecta.'
+        : err.code === 'auth/requires-recent-login'
+          ? 'Debes iniciar sesión de nuevo para cambiar la contraseña.'
+          : err.code === 'auth/weak-password'
+            ? 'La nueva contraseña debe tener al menos 6 caracteres.'
+            : err.message || 'No se pudo cambiar la contraseña. Intenta de nuevo.';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   if (isLoading) {
     return (
       <View style={themedStyles.container}>
         <View style={themedStyles.header}>
-          <TouchableOpacity style={themedStyles.backButton}>
+          <TouchableOpacity style={themedStyles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#000" />
           </TouchableOpacity>
           <Text style={themedStyles.headerTitle}>Configuración</Text>
@@ -148,7 +193,7 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
 
         <View style={themedStyles.header}>
-          <TouchableOpacity style={themedStyles.backButton}>
+          <TouchableOpacity style={themedStyles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#000" />
           </TouchableOpacity>
           <Text style={themedStyles.headerTitle}>Configuración</Text>
@@ -281,6 +326,70 @@ export default function SettingsScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        <Modal
+          visible={showPasswordModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPasswordModal(false)}
+        >
+          <View style={themedStyles.passwordOverlay}>
+            <View style={themedStyles.passwordContent}>
+              <Text style={themedStyles.passwordTitle}>Cambiar contraseña</Text>
+
+              <Text style={themedStyles.passwordLabel}>Contraseña actual</Text>
+              <TextInput
+                style={themedStyles.passwordInput}
+                placeholder="Ingresa tu contraseña actual"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+              />
+
+              <Text style={themedStyles.passwordLabel}>Nueva contraseña</Text>
+              <TextInput
+                style={themedStyles.passwordInput}
+                placeholder="Mínimo 6 caracteres"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+
+              <Text style={themedStyles.passwordLabel}>Confirmar nueva contraseña</Text>
+              <TextInput
+                style={themedStyles.passwordInput}
+                placeholder="Repite la nueva contraseña"
+                placeholderTextColor="#999"
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+
+              <View style={themedStyles.passwordButtons}>
+                <TouchableOpacity
+                  style={themedStyles.passwordCancelBtn}
+                  onPress={() => setShowPasswordModal(false)}
+                  disabled={isChangingPassword}
+                >
+                  <Text style={themedStyles.passwordCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[themedStyles.passwordSubmitBtn, isChangingPassword && { opacity: 0.6 }]}
+                  onPress={handlePasswordSubmit}
+                  disabled={isChangingPassword}
+                >
+                  {isChangingPassword ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={themedStyles.passwordSubmitText}>Cambiar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
       </ScrollView>
     </View>
@@ -463,6 +572,74 @@ function getStyles(colors, insets = { top: 0 }) {
 
     logoutButtonDisabled: {
       opacity: 0.7,
+    },
+
+    passwordOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    passwordContent: {
+      backgroundColor: colors.card || '#FFF',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+      paddingBottom: Math.max((insets?.bottom || 0) + 24, 32),
+    },
+    passwordTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    passwordLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary || '#666',
+      marginBottom: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    passwordInput: {
+      borderWidth: 1,
+      borderColor: colors.border || '#E0E0E0',
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      fontSize: 15,
+      color: colors.text,
+      marginBottom: 16,
+    },
+    passwordButtons: {
+      flexDirection: 'row',
+      gap: 12,
+      marginTop: 8,
+    },
+    passwordCancelBtn: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border || '#E0E0E0',
+      alignItems: 'center',
+    },
+    passwordCancelText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textSecondary || '#666',
+    },
+    passwordSubmitBtn: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 12,
+      backgroundColor: '#529BD6',
+      alignItems: 'center',
+    },
+    passwordSubmitText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#FFF',
     },
   });
 }

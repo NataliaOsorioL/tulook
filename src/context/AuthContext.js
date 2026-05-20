@@ -45,6 +45,10 @@ export function AuthProvider({ children }) {
     await authService.logout();
   }, []);
 
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    await authService.changePassword(currentPassword, newPassword);
+  }, []);
+
   const resetPassword = useCallback(async (email) => {
     await authService.resetPassword(email);
   }, []);
@@ -60,6 +64,7 @@ export function AuthProvider({ children }) {
         register,
         logout,
         resetPassword,
+        changePassword,
       }}
     >
       {children}

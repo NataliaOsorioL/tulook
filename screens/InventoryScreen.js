@@ -81,11 +81,8 @@ function buildInfo(garment) {
 const InventarioScreen = () => {
   const { colors } = useTheme();
   const { userId } = useAuth();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isSmallScreen = windowHeight < 700;
-  const isLandscape = windowWidth > windowHeight;
-  const previewHeight = isSmallScreen ? (isLandscape ? 100 : 160) : (isLandscape ? 140 : 220);
 
   const themedStyles = useMemo(() => getStyles(colors, windowHeight, insets), [colors, windowHeight, insets]);
 
@@ -120,14 +117,7 @@ const InventarioScreen = () => {
   const [pendingGarment, setPendingGarment] = useState(null);
   const mountedRef = useRef(true);
 
-  React.useEffect(() => {
-    const isBtnDisabled = !formSubtype || !pendingGarment;
-    console.log('[DEBUG] Botón "Siguiente" habilitado:', !isBtnDisabled, '(Subtipo:', formSubtype, ', Prenda pendiente:', !!pendingGarment, ')');
-  }, [formSubtype, pendingGarment]);
 
-  React.useEffect(() => {
-    console.log('[DEBUG] Categoría del formulario cambiada a:', formCategory);
-  }, [formCategory]);
 
   const getColor = (hex) => {
     if (!hex || hex === 'multi') return colors.inventoryColorDotFallback;
@@ -136,7 +126,6 @@ const InventarioScreen = () => {
 
   const handleOpenModal = () => setShowModal(true);
   const handleCloseModal = () => {
-    console.log('[DEBUG] Cerrando modal del formulario.');
     setShowModal(false);
     setShowEmojiPicker(false);
     setShowGarmentForm(false);
@@ -146,7 +135,6 @@ const InventarioScreen = () => {
 
   const handleTakePhoto = async (isRetake = false) => {
     try {
-      console.log('[DEBUG] Iniciando captura de foto con la cámara. isRetake:', isRetake);
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         if (Platform.OS === 'web') {
@@ -162,11 +150,8 @@ const InventarioScreen = () => {
         aspect: [1, 1],
       });
       if (result.canceled || !result.assets?.[0]) {
-        console.log('[DEBUG] Captura de foto cancelada.');
         return;
       }
-
-      console.log('[DEBUG] Foto capturada correctamente. URI:', result.assets[0].uri);
       const newPhoto = { type: 'photo', uri: result.assets[0].uri };
       setPendingGarment(newPhoto);
       setImageLoadError(false);
@@ -185,7 +170,6 @@ const InventarioScreen = () => {
 
   const handlePickImageFromGallery = async (isRetake = false) => {
     try {
-      console.log('[DEBUG] Seleccionando imagen de la galería. isRetake:', isRetake);
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         if (Platform.OS === 'web') {
@@ -202,11 +186,8 @@ const InventarioScreen = () => {
         aspect: [1, 1],
       });
       if (result.canceled || !result.assets?.[0]) {
-        console.log('[DEBUG] Selección de imagen cancelada.');
         return;
       }
-
-      console.log('[DEBUG] Imagen de galería seleccionada correctamente. URI:', result.assets[0].uri);
       const newPhoto = { type: 'photo', uri: result.assets[0].uri };
       setPendingGarment(newPhoto);
       setImageLoadError(false);
@@ -224,7 +205,6 @@ const InventarioScreen = () => {
   };
 
   const handleChangePhoto = () => {
-    console.log('[DEBUG] Iniciando cambio de foto (Cámara / Galería).');
     if (Platform.OS === 'web') {
       const option = window.confirm('¿Quieres elegir desde la galería? (Aceptar para Galería, Cancelar para Cámara)');
       if (option) {
@@ -246,7 +226,6 @@ const InventarioScreen = () => {
   };
 
   const openGarmentForm = (initialCategory = GARMENT_CATEGORIES.TOP, initialSubtype = '') => {
-    console.log('[DEBUG] Abriendo formulario de prenda. Categoría:', initialCategory, 'Subtipo:', initialSubtype);
     setFormCategory(initialCategory);
     setFormSubtype(initialSubtype);
     setFormColor('#CCC');
@@ -289,7 +268,7 @@ const InventarioScreen = () => {
       const pg = pendingGarment;
       if (!pg) return;
 
-      console.log('[DEBUG] Guardando prenda. Categoría:', formCategory, 'Subtipo:', formSubtype, 'Tipo de origen:', pg.type);
+
 
       if (pg.type === 'photo') {
         setProcessingLabel('Subiendo imagen...');
@@ -332,7 +311,7 @@ const InventarioScreen = () => {
   const handleSelectEmoji = (emoji) => {
     const category = getCategoryForEmoji(emoji);
     const subtype = DEFAULT_SUBTYPE_BY_EMOJI[emoji] || '';
-    console.log('[DEBUG] Emoji seleccionado:', emoji, 'Categoría asignada:', category, 'Subtipo asignado:', subtype);
+
     setPendingGarment({ type: 'emoji', emoji, category });
     openGarmentForm(category, subtype);
   };
@@ -489,6 +468,7 @@ const InventarioScreen = () => {
       if (!confirmed) return;
       try {
         await deleteSavedOutfit(outfit.id);
+        window.alert('Outfit eliminado correctamente.');
       } catch (err) {
         logger.warn('[Inventory] Error al eliminar outfit:', err.message);
         window.alert('No se pudo eliminar el outfit. Verifica tu conexión e intenta de nuevo.');
@@ -503,6 +483,7 @@ const InventarioScreen = () => {
             text: 'Eliminar', style: 'destructive', onPress: async () => {
               try {
                 await deleteSavedOutfit(outfit.id);
+                Alert.alert('', 'Outfit eliminado correctamente.');
               } catch (err) {
                 logger.warn('[Inventory] Error al eliminar outfit:', err.message);
                 Alert.alert('Error', 'No se pudo eliminar el outfit. Verifica tu conexión e intenta de nuevo.');
@@ -825,23 +806,19 @@ const InventarioScreen = () => {
         transparent
         animationType="slide"
         onRequestClose={() => setShowGarmentForm(false)}
+        statusBarTranslucent
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={themedStyles.formOverlay}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        >
+        <View style={themedStyles.gFormOverlay}>
           <TouchableOpacity
-            style={themedStyles.formOverlayBackdrop}
+            style={themedStyles.gFormBackdrop}
             activeOpacity={1}
             onPress={handleCloseModal}
           />
-          <View style={themedStyles.formContent}>
-            {/* Header */}
-            <View style={themedStyles.formHeader}>
-              <Text style={themedStyles.formTitle}>Nueva prenda</Text>
+          <View style={themedStyles.gFormSheet}>
+            <View style={themedStyles.gFormHeader}>
+              <Text style={themedStyles.gFormTitle}>Nueva prenda</Text>
               <TouchableOpacity
-                style={themedStyles.formCloseBtn}
+                style={themedStyles.gFormCloseBtn}
                 onPress={handleCloseModal}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -849,87 +826,67 @@ const InventarioScreen = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Image preview */}
-            {pendingGarment?.type === 'photo' ? (
-              <View style={themedStyles.formImagePreviewCard}>
-                {imageLoadError ? (
-                  <View style={[themedStyles.formImagePlaceholder, { maxHeight: previewHeight }]}>
-                    <Ionicons name="image-outline" size={36} color="#CCC" />
-                    <Text style={themedStyles.formImagePlaceholderText}>Error al cargar imagen</Text>
-                  </View>
-                ) : (
-                  <Image
-                    source={{ uri: pendingGarment.uri }}
-                    style={[themedStyles.formImagePreview, { maxHeight: previewHeight }]}
-                    resizeMode="contain"
-                    onError={() => setImageLoadError(true)}
-                  />
-                )}
-              </View>
-            ) : pendingGarment?.type === 'emoji' ? (
-              <View style={themedStyles.formEmojiPreviewCard}>
-                <Text style={themedStyles.formEmojiPreview}>{pendingGarment.emoji}</Text>
-              </View>
-            ) : null}
-
-            {/* Step indicator */}
-            <View style={themedStyles.formSteps}>
-              <View style={[themedStyles.formStepDot, formStep >= 1 && themedStyles.formStepDotActive]} />
-              <View style={themedStyles.formStepLine} />
-              <View style={[themedStyles.formStepDot, formStep >= 2 && themedStyles.formStepDotActive]} />
-              <View style={themedStyles.formStepLine} />
-              <View style={[themedStyles.formStepDot, formStep >= 3 && themedStyles.formStepDotActive]} />
-            </View>
-
-            {/* Scrollable form body */}
             <ScrollView
-              style={themedStyles.formBody}
-              contentContainerStyle={themedStyles.formBodyContent}
+              style={themedStyles.gFormBody}
+              contentContainerStyle={themedStyles.gFormBodyContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
             >
+              {pendingGarment?.type === 'photo' ? (
+                <View style={themedStyles.gFormPreviewWrap}>
+                  {imageLoadError ? (
+                    <View style={themedStyles.gFormPreviewPlaceholder}>
+                      <Ionicons name="image-outline" size={28} color="#CCC" />
+                      <Text style={themedStyles.gFormPreviewPlaceholderText}>Error al cargar imagen</Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: pendingGarment.uri }}
+                      style={themedStyles.gFormPreviewImage}
+                      resizeMode="contain"
+                      onError={() => setImageLoadError(true)}
+                    />
+                  )}
+                </View>
+              ) : pendingGarment?.type === 'emoji' ? (
+                <View style={themedStyles.gFormEmojiWrap}>
+                  <Text style={themedStyles.gFormEmojiText}>{pendingGarment.emoji}</Text>
+                </View>
+              ) : null}
+
+              <View style={themedStyles.gFormSteps}>
+                <View style={[themedStyles.gFormStepDot, formStep >= 1 && themedStyles.gFormStepDotActive]} />
+                <View style={themedStyles.gFormStepLine} />
+                <View style={[themedStyles.gFormStepDot, formStep >= 2 && themedStyles.gFormStepDotActive]} />
+                <View style={themedStyles.gFormStepLine} />
+                <View style={[themedStyles.gFormStepDot, formStep >= 3 && themedStyles.gFormStepDotActive]} />
+              </View>
+
               {formStep === 1 && (
                 <View>
-                  <Text style={themedStyles.formSectionTitle}>Categoría y tipo</Text>
-
-                  <Text style={themedStyles.formLabel}>Categoría</Text>
-                  <View style={themedStyles.formChipRow}>
+                  <Text style={themedStyles.gFormSectionTitle}>Categoría y tipo</Text>
+                  <Text style={themedStyles.gFormLabel}>Categoría</Text>
+                  <View style={themedStyles.gFormChipRow}>
                     {Object.entries(GARMENT_CATEGORIES_LABELS).map(([key, label]) => (
                       <TouchableOpacity
                         key={key}
-                        style={[
-                          themedStyles.formChip,
-                          formCategory === key && themedStyles.formChipActive,
-                        ]}
-                        onPress={() => {
-                          setFormCategory(key);
-                          setFormSubtype('');
-                        }}
+                        style={[themedStyles.gFormChip, formCategory === key && themedStyles.gFormChipActive]}
+                        onPress={() => { setFormCategory(key); setFormSubtype(''); }}
                       >
-                        <Text style={[
-                          themedStyles.formChipText,
-                          formCategory === key && themedStyles.formChipTextActive,
-                        ]}>{label}</Text>
+                        <Text style={[themedStyles.gFormChipText, formCategory === key && themedStyles.gFormChipTextActive]}>{label}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-
-                  <Text style={themedStyles.formLabel}>Tipo de prenda</Text>
-                  <View style={themedStyles.formChipRow}>
+                  <Text style={themedStyles.gFormLabel}>Tipo de prenda</Text>
+                  <View style={themedStyles.gFormChipRow}>
                     {GARMENT_TYPES[formCategory].map((type) => (
                       <TouchableOpacity
                         key={type}
-                        style={[
-                          themedStyles.formChip,
-                          formSubtype === type && themedStyles.formChipActive,
-                        ]}
+                        style={[themedStyles.gFormChip, formSubtype === type && themedStyles.gFormChipActive]}
                         onPress={() => setFormSubtype(type)}
                       >
-                        <Text style={[
-                          themedStyles.formChipText,
-                          formSubtype === type && themedStyles.formChipTextActive,
-                        ]}>{type}</Text>
+                        <Text style={[themedStyles.gFormChipText, formSubtype === type && themedStyles.gFormChipTextActive]}>{type}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -938,31 +895,27 @@ const InventarioScreen = () => {
 
               {formStep === 2 && (
                 <View>
-                  <Text style={themedStyles.formSectionTitle}>Elige un color</Text>
-
-                  <View style={themedStyles.formColorGrid}>
+                  <Text style={themedStyles.gFormSectionTitle}>Elige un color</Text>
+                  <View style={themedStyles.gFormColorGrid}>
                     {COLOR_OPTIONS.map((c) => (
                       <TouchableOpacity
                         key={c.hex}
                         style={[
-                          themedStyles.formColorSwatch,
+                          themedStyles.gFormColorSwatch,
                           { backgroundColor: c.hex },
-                          formColor === c.hex && themedStyles.formColorSwatchSelected,
+                          formColor === c.hex && themedStyles.gFormColorSwatchSelected,
                           c.hex === '#F8F9FA' && { borderWidth: 1, borderColor: '#DDD' },
                         ]}
                         onPress={() => setFormColor(c.hex)}
                       >
-                        {formColor === c.hex && (
-                          <Ionicons name="checkmark" size={18} color="#FFF" />
-                        )}
+                        {formColor === c.hex && <Ionicons name="checkmark" size={16} color="#FFF" />}
                       </TouchableOpacity>
                     ))}
                   </View>
-
-                  <View style={themedStyles.formColorInputRow}>
-                    <Text style={themedStyles.formColorLabel}>Personalizado:</Text>
+                  <View style={themedStyles.gFormColorInputRow}>
+                    <Text style={themedStyles.gFormColorLabel}>Personalizado:</Text>
                     <TextInput
-                      style={themedStyles.formColorInput}
+                      style={themedStyles.gFormColorInput}
                       placeholder="#HEX"
                       placeholderTextColor="#999"
                       value={formCustomColor}
@@ -971,7 +924,7 @@ const InventarioScreen = () => {
                       autoCapitalize="characters"
                     />
                     {formCustomColor.length === 7 && (
-                      <View style={[themedStyles.formColorPreview, { backgroundColor: formCustomColor }]} />
+                      <View style={[themedStyles.gFormColorPreview, { backgroundColor: formCustomColor }]} />
                     )}
                   </View>
                 </View>
@@ -979,21 +932,19 @@ const InventarioScreen = () => {
 
               {formStep === 3 && (
                 <View>
-                  <Text style={themedStyles.formSectionTitle}>Nombre y notas</Text>
-
-                  <Text style={themedStyles.formLabel}>Nombre (opcional)</Text>
+                  <Text style={themedStyles.gFormSectionTitle}>Nombre y notas</Text>
+                  <Text style={themedStyles.gFormLabel}>Nombre (opcional)</Text>
                   <TextInput
-                    style={themedStyles.formTextInput}
+                    style={themedStyles.gFormTextInput}
                     placeholder="Ej: Blusa blanca elegante"
                     placeholderTextColor="#999"
                     value={formName}
                     onChangeText={setFormName}
                     maxLength={60}
                   />
-
-                  <Text style={themedStyles.formLabel}>Notas (opcional)</Text>
+                  <Text style={themedStyles.gFormLabel}>Notas (opcional)</Text>
                   <TextInput
-                    style={[themedStyles.formTextInput, themedStyles.formTextArea]}
+                    style={[themedStyles.gFormTextInput, themedStyles.gFormTextArea]}
                     placeholder="Ej: Perfecta para la oficina"
                     placeholderTextColor="#999"
                     value={formNotes}
@@ -1002,68 +953,55 @@ const InventarioScreen = () => {
                     numberOfLines={3}
                     maxLength={200}
                   />
-
-                  <View style={themedStyles.formSummary}>
-                    <Text style={themedStyles.formSummaryText}>
+                  <View style={themedStyles.gFormSummary}>
+                    <Text style={themedStyles.gFormSummaryText}>
                       {GARMENT_CATEGORIES_LABELS[formCategory]} — {formSubtype}
                     </Text>
-                    <View style={[themedStyles.formSummaryDot, { backgroundColor: formCustomColor.trim() || formColor }]} />
+                    <View style={[themedStyles.gFormSummaryDot, { backgroundColor: formCustomColor.trim() || formColor }]} />
                   </View>
                 </View>
               )}
             </ScrollView>
 
-            {/* Sticky footer */}
-            {formStep < 3 ? (
-              <View style={themedStyles.formFooter}>
-                <TouchableOpacity
-                  style={themedStyles.formChangePhotoBtn}
-                  onPress={pendingGarment?.type === 'photo' ? handleChangePhoto : undefined}
-                >
-                  {pendingGarment?.type === 'photo' && (
-                    <>
-                      <Ionicons name="camera-outline" size={16} color="#E67E22" />
-                      <Text style={themedStyles.formChangePhotoText}>Cambiar foto</Text>
-                    </>
-                  )}
+            <View style={themedStyles.gFormFooter}>
+              {formStep > 1 && (
+                <TouchableOpacity style={themedStyles.gFormBackBtn} onPress={() => setFormStep(formStep - 1)}>
+                  <Ionicons name="chevron-back" size={18} color={colors.textSecondary || '#666'} />
+                  <Text style={themedStyles.gFormBackText}>Atrás</Text>
                 </TouchableOpacity>
+              )}
+              {formStep < 3 ? (
                 <TouchableOpacity
-                  style={[
-                    themedStyles.formNextBtn,
-                    (!formSubtype || !pendingGarment) && themedStyles.formNextBtnDisabled
-                  ]}
+                  style={[themedStyles.gFormNextBtn, (!formSubtype || !pendingGarment) && themedStyles.gFormNextBtnDisabled]}
                   disabled={!formSubtype || !pendingGarment}
-                  onPress={() => {
-                    console.log('[DEBUG] Avanzando al paso:', formStep + 1);
-                    setFormStep(formStep + 1);
-                  }}
+                  onPress={() => setFormStep(formStep + 1)}
                 >
-                  <Text style={themedStyles.formNextBtnText}>Siguiente</Text>
+                  <Text style={themedStyles.gFormNextBtnText}>Siguiente</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#FFF" />
                 </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={themedStyles.formFooter}>
-                <TouchableOpacity style={themedStyles.formBackBtn} onPress={() => setFormStep(2)}>
-                  <Text style={themedStyles.formBackBtnText}>Atrás</Text>
-                </TouchableOpacity>
+              ) : (
                 <TouchableOpacity
-                  style={themedStyles.formSaveBtn}
+                  style={themedStyles.gFormSaveBtn}
                   onPress={saveGarment}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
-                    <View style={themedStyles.formSaveBtnProcessing}>
+                    <View style={themedStyles.gFormSaveProcessing}>
                       <ActivityIndicator size="small" color="#FFF" />
-                      <Text style={themedStyles.formSaveBtnProcessingText}>{processingLabel}</Text>
+                      <Text style={themedStyles.gFormSaveProcessingText}>{processingLabel}</Text>
                     </View>
                   ) : (
-                    <Text style={themedStyles.formSaveBtnText}>Guardar prenda</Text>
+                    <Text style={themedStyles.gFormSaveBtnText}>Guardar prenda</Text>
                   )}
                 </TouchableOpacity>
-              </View>
+              )}
+            </View>
+
+            {!formSubtype && formStep < 3 && (
+              <Text style={themedStyles.gFormHint}>Selecciona un tipo de prenda para continuar</Text>
             )}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Outfit detail modal */}
@@ -1073,9 +1011,9 @@ const InventarioScreen = () => {
         animationType="slide"
         onRequestClose={handleCloseOutfitDetail}
       >
-        <View style={themedStyles.formOverlay}>
+        <View style={themedStyles.gFormOverlay}>
           <TouchableOpacity
-            style={themedStyles.formOverlayBackdrop}
+            style={themedStyles.gFormBackdrop}
             activeOpacity={1}
             onPress={handleCloseOutfitDetail}
           />
@@ -1086,7 +1024,7 @@ const InventarioScreen = () => {
                 {selectedOutfit?.name || 'Detalles del outfit'}
               </Text>
               <TouchableOpacity
-                style={themedStyles.formCloseBtn}
+                style={themedStyles.gFormCloseBtn}
                 onPress={handleCloseOutfitDetail}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -1506,31 +1444,31 @@ function getStyles(colors, winHeight, insets = { top: 0, bottom: 0 }) {
       backgroundColor: colors.card,
     },
 
-    // Garment form styles
-    formOverlay: {
+    // Garment form styles — redesigned responsive layout
+    gFormOverlay: {
       flex: 1,
+      justifyContent: 'flex-end',
       backgroundColor: 'rgba(0,0,0,0.5)',
     },
-    formOverlayBackdrop: {
+    gFormBackdrop: {
       flex: 1,
     },
-    formContent: {
+    gFormSheet: {
       backgroundColor: colors.card,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      paddingTop: 16,
-      paddingHorizontal: 20,
-      paddingBottom: Math.max(insets.bottom + 16, 24),
-      maxHeight: safeHeight * 0.92,
+      height: Math.min(safeHeight * 0.88, 620),
+      paddingBottom: Math.max(insets.bottom + 8, 12),
     },
-    formHeader: {
+    gFormHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 12,
-      paddingRight: 4,
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 8,
     },
-    formCloseBtn: {
+    gFormCloseBtn: {
       width: 32,
       height: 32,
       borderRadius: 16,
@@ -1538,287 +1476,272 @@ function getStyles(colors, winHeight, insets = { top: 0, bottom: 0 }) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    formTitle: {
+    gFormTitle: {
       fontSize: 18,
       fontWeight: '700',
       color: colors.text,
     },
-    formSteps: {
+    gFormPreviewWrap: {
+      marginHorizontal: 20,
+      borderRadius: 12,
+      backgroundColor: colors.background,
+      overflow: 'hidden',
+      height: 110,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gFormPreviewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    gFormPreviewPlaceholder: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gFormPreviewPlaceholderText: {
+      fontSize: 12,
+      color: '#AAA',
+      marginTop: 4,
+    },
+    gFormEmojiWrap: {
+      marginHorizontal: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+    },
+    gFormEmojiText: {
+      fontSize: 44,
+    },
+    gFormSteps: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
+      paddingVertical: 12,
       gap: 4,
     },
-    formStepDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+    gFormStepDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
       backgroundColor: colors.border,
     },
-    formStepDotActive: {
+    gFormStepDotActive: {
       backgroundColor: '#E67E22',
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
-    formStepLine: {
-      width: 32,
+    gFormStepLine: {
+      width: 28,
       height: 2,
       backgroundColor: colors.border,
     },
-    formBody: {
+    gFormBody: {
       flex: 1,
     },
-    formBodyContent: {
-      paddingBottom: 8,
+    gFormBodyContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 4,
     },
-    formSectionTitle: {
-      fontSize: 20,
+    gFormSectionTitle: {
+      fontSize: 18,
       fontWeight: '700',
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: 14,
       color: colors.text,
     },
-    formLabel: {
-      fontSize: 13,
+    gFormLabel: {
+      fontSize: 12,
       fontWeight: '600',
       color: colors.textSecondary,
-      marginBottom: 8,
-      marginTop: 4,
+      marginBottom: 6,
+      marginTop: 2,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    formChipRow: {
+    gFormChipRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 16,
+      gap: 6,
+      marginBottom: 14,
     },
-    formChip: {
-      paddingVertical: 8,
-      paddingHorizontal: 14,
-      borderRadius: 16,
+    gFormChip: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 14,
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    formChipActive: {
+    gFormChipActive: {
       backgroundColor: '#E67E22',
       borderColor: '#E67E22',
     },
-    formChipText: {
-      fontSize: 13,
+    gFormChipText: {
+      fontSize: 12,
       color: colors.textSecondary,
       fontWeight: '500',
     },
-    formChipTextActive: {
+    gFormChipTextActive: {
       color: '#FFF',
       fontWeight: '600',
     },
-    formColorGrid: {
+    gFormColorGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      gap: 12,
-      marginBottom: 20,
+      gap: 10,
+      marginBottom: 16,
     },
-    formColorSwatch: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+    gFormColorSwatch: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    formColorSwatchSelected: {
+    gFormColorSwatchSelected: {
       borderWidth: 3,
       borderColor: colors.text,
     },
-    formColorInputRow: {
+    gFormColorInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
-      gap: 8,
+      marginBottom: 16,
+      gap: 6,
     },
-    formColorLabel: {
-      fontSize: 14,
+    gFormColorLabel: {
+      fontSize: 13,
       color: colors.textSecondary,
     },
-    formColorInput: {
+    gFormColorInput: {
       flex: 1,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 8,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      fontSize: 14,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      fontSize: 13,
       color: colors.text,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
-    formColorPreview: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+    gFormColorPreview: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    formTextInput: {
+    gFormTextInput: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      fontSize: 15,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      fontSize: 14,
       color: colors.text,
-      marginBottom: 16,
+      marginBottom: 14,
     },
-    formTextArea: {
-      minHeight: 72,
+    gFormTextArea: {
+      minHeight: 64,
       textAlignVertical: 'top',
     },
-    formSummary: {
+    gFormSummary: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 10,
-      marginBottom: 16,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
+      gap: 8,
+      marginBottom: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
       backgroundColor: colors.background,
-      borderRadius: 12,
+      borderRadius: 10,
     },
-    formSummaryText: {
-      fontSize: 14,
+    gFormSummaryText: {
+      fontSize: 13,
       color: colors.text,
       fontWeight: '500',
     },
-    formSummaryDot: {
-      width: 16,
-      height: 16,
-      borderRadius: 8,
+    gFormSummaryDot: {
+      width: 14,
+      height: 14,
+      borderRadius: 7,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    formFooter: {
+    gFormFooter: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingTop: 12,
+      gap: 10,
+      paddingHorizontal: 20,
+      paddingTop: 10,
       borderTopWidth: 1,
       borderTopColor: colors.border,
-      marginTop: 4,
+      marginTop: 6,
     },
-    formChangePhotoBtn: {
+    gFormBackBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingVertical: 8,
-      paddingHorizontal: 4,
-    },
-    formChangePhotoText: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: '#E67E22',
-    },
-    formNextBtn: {
-      flex: 1,
-      backgroundColor: '#E67E22',
-      borderRadius: 12,
-      paddingVertical: 14,
-      alignItems: 'center',
-    },
-    formNextBtnDisabled: {
-      opacity: 0.4,
-    },
-    formNextBtnText: {
-      color: '#FFF',
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    formBackBtn: {
-      flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      gap: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 10,
       borderWidth: 1,
       borderColor: colors.border,
-      alignItems: 'center',
     },
-    formBackBtnText: {
-      fontSize: 15,
+    gFormBackText: {
+      fontSize: 14,
       fontWeight: '600',
       color: colors.textSecondary,
     },
-    formSaveBtn: {
+    gFormNextBtn: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      backgroundColor: '#E67E22',
+      borderRadius: 10,
+      paddingVertical: 12,
+    },
+    gFormNextBtnDisabled: {
+      opacity: 0.4,
+    },
+    gFormNextBtnText: {
+      color: '#FFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    gFormSaveBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 10,
       backgroundColor: '#E67E22',
       alignItems: 'center',
     },
-    formSaveBtnText: {
-      fontSize: 15,
+    gFormSaveBtnText: {
+      fontSize: 14,
       fontWeight: '600',
       color: '#FFF',
     },
-    formSaveBtnProcessing: {
+    gFormSaveProcessing: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
     },
-    formSaveBtnProcessingText: {
-      fontSize: 14,
+    gFormSaveProcessingText: {
+      fontSize: 13,
       color: '#FFF',
       fontWeight: '500',
     },
-    formImagePreviewCard: {
-      backgroundColor: colors.background,
-      borderRadius: 16,
-      marginBottom: 12,
-      ...Platform.select({
-        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
-        default: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-        },
-      }),
-    },
-    formImagePreview: {
-      width: '100%',
-      aspectRatio: 1,
-    },
-    formImagePlaceholder: {
-      width: '100%',
-      aspectRatio: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: colors.background,
-    },
-    formImagePlaceholderText: {
-      fontSize: 13,
-      color: '#AAA',
-      marginTop: 8,
-    },
-    formEmojiPreviewCard: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 12,
-      backgroundColor: colors.background,
-      borderRadius: 16,
-      marginBottom: 12,
-      ...Platform.select({
-        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
-        default: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-        },
-      }),
-    },
-    formEmojiPreview: {
-      fontSize: 60,
+    gFormHint: {
+      textAlign: 'center',
+      color: '#E67E22',
+      fontSize: 11,
+      paddingHorizontal: 20,
+      paddingTop: 6,
     },
 
     // Outfit detail modal styles
@@ -1829,7 +1752,7 @@ function getStyles(colors, winHeight, insets = { top: 0, bottom: 0 }) {
       paddingTop: 16,
       paddingHorizontal: 20,
       paddingBottom: Math.max(insets.bottom + 16, 24),
-      maxHeight: safeHeight * 0.92,
+      height: Math.min(safeHeight * 0.88, 620),
     },
     outfitDetailHeader: {
       flexDirection: 'row',

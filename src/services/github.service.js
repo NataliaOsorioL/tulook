@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { logger } from '../utils/logger';
 
 const GITHUB_OWNER = process.env.EXPO_PUBLIC_GITHUB_OWNER || 'NataliaOsorioL';
@@ -25,7 +26,6 @@ async function uriToBase64(localUri) {
       reader.readAsDataURL(blob);
     });
   }
-  const FileSystem = await import('expo-file-system');
   return FileSystem.readAsStringAsync(localUri, {
     encoding: FileSystem.EncodingType.Base64,
   });
