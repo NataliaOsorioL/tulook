@@ -25,6 +25,33 @@ const EMOJI_BY_CATEGORY = {
   [GARMENT_CATEGORIES.ACCESSORY]: ['👜', '🧢', '🕶️', '⌚'],
 };
 
+const DEFAULT_SUBTYPE_BY_EMOJI = {
+  '👕': 'Camisa',
+  '👚': 'Blusa',
+  '🧥': 'Chamarra',
+  '👔': 'Camisa',
+  '👖': 'Jean',
+  '🩳': 'Short',
+  '👗': 'Vestido corto',
+  '👘': 'Mono',
+  '👟': 'Tenis',
+  '👠': 'Tacones',
+  '🥾': 'Botas',
+  '👜': 'Bolso',
+  '🧢': 'Gorra',
+  '🕶️': 'Lentes',
+  '⌚': 'Reloj',
+};
+
+const getCategoryForEmoji = (emoji) => {
+  for (const [category, emojis] of Object.entries(EMOJI_BY_CATEGORY)) {
+    if (emojis.includes(emoji)) {
+      return category;
+    }
+  }
+  return GARMENT_CATEGORIES.TOP;
+};
+
 const COLOR_OPTIONS = [
   { hex: '#FF6B6B', name: 'Rojo' },
   { hex: '#FFA94D', name: 'Naranja' },
@@ -90,8 +117,17 @@ const InventarioScreen = () => {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [showOutfitDetail, setShowOutfitDetail] = useState(false);
   const [selectedOutfit, setSelectedOutfit] = useState(null);
-  const pendingGarment = useRef(null);
+  const [pendingGarment, setPendingGarment] = useState(null);
   const mountedRef = useRef(true);
+
+  React.useEffect(() => {
+    const isBtnDisabled = !formSubtype || !pendingGarment;
+    console.log('[DEBUG] Botón "Siguiente" habilitado:', !isBtnDisabled, '(Subtipo:', formSubtype, ', Prenda pendiente:', !!pendingGarment, ')');
+  }, [formSubtype, pendingGarment]);
+
+  React.useEffect(() => {
+    console.log('[DEBUG] Categoría del formulario cambiada a:', formCategory);
+  }, [formCategory]);
 
   const getColor = (hex) => {
     if (!hex || hex === 'multi') return colors.inventoryColorDotFallback;
@@ -100,15 +136,17 @@ const InventarioScreen = () => {
 
   const handleOpenModal = () => setShowModal(true);
   const handleCloseModal = () => {
+    console.log('[DEBUG] Cerrando modal del formulario.');
     setShowModal(false);
     setShowEmojiPicker(false);
     setShowGarmentForm(false);
     setFormStep(1);
-    pendingGarment.current = null;
+    setPendingGarment(null);
   };
 
-  const handleRetakePhoto = async () => {
+  const handleTakePhoto = async (isRetake = false) => {
     try {
+      console.log('[DEBUG] Iniciando captura de foto con la cámara. isRetake:', isRetake);
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         if (Platform.OS === 'web') {
@@ -123,11 +161,20 @@ const InventarioScreen = () => {
         allowsEditing: true,
         aspect: [1, 1],
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      pendingGarment.current = { type: 'photo', uri: result.assets[0].uri };
+      if (result.canceled || !result.assets?.[0]) {
+        console.log('[DEBUG] Captura de foto cancelada.');
+        return;
+      }
+
+      console.log('[DEBUG] Foto capturada correctamente. URI:', result.assets[0].uri);
+      const newPhoto = { type: 'photo', uri: result.assets[0].uri };
+      setPendingGarment(newPhoto);
       setImageLoadError(false);
+      if (!isRetake) {
+        openGarmentForm(GARMENT_CATEGORIES.TOP, '');
+      }
     } catch (err) {
-      logger.warn('[Inventory] Error al retomar foto:', err.message);
+      logger.warn('[Inventory] Error al tomar foto:', err.message);
       if (Platform.OS === 'web') {
         window.alert('No se pudo tomar la foto. Intenta de nuevo.');
       } else {
@@ -136,9 +183,72 @@ const InventarioScreen = () => {
     }
   };
 
-  const openGarmentForm = () => {
-    setFormCategory(GARMENT_CATEGORIES.TOP);
-    setFormSubtype('');
+  const handlePickImageFromGallery = async (isRetake = false) => {
+    try {
+      console.log('[DEBUG] Seleccionando imagen de la galería. isRetake:', isRetake);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        if (Platform.OS === 'web') {
+          window.alert('Se necesita acceso a la galería para seleccionar fotos.');
+        } else {
+          Alert.alert('Permiso requerido', 'Se necesita acceso a la galería para seleccionar fotos.');
+        }
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'images',
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets?.[0]) {
+        console.log('[DEBUG] Selección de imagen cancelada.');
+        return;
+      }
+
+      console.log('[DEBUG] Imagen de galería seleccionada correctamente. URI:', result.assets[0].uri);
+      const newPhoto = { type: 'photo', uri: result.assets[0].uri };
+      setPendingGarment(newPhoto);
+      setImageLoadError(false);
+      if (!isRetake) {
+        openGarmentForm(GARMENT_CATEGORIES.TOP, '');
+      }
+    } catch (err) {
+      logger.warn('[Inventory] Error al seleccionar imagen de la galería:', err.message);
+      if (Platform.OS === 'web') {
+        window.alert('No se pudo seleccionar la imagen. Intenta de nuevo.');
+      } else {
+        Alert.alert('Error', 'No se pudo seleccionar la imagen. Intenta de nuevo.');
+      }
+    }
+  };
+
+  const handleChangePhoto = () => {
+    console.log('[DEBUG] Iniciando cambio de foto (Cámara / Galería).');
+    if (Platform.OS === 'web') {
+      const option = window.confirm('¿Quieres elegir desde la galería? (Aceptar para Galería, Cancelar para Cámara)');
+      if (option) {
+        handlePickImageFromGallery(true);
+      } else {
+        handleTakePhoto(true);
+      }
+    } else {
+      Alert.alert(
+        'Cambiar foto',
+        'Selecciona una opción:',
+        [
+          { text: 'Cámara', onPress: () => handleTakePhoto(true) },
+          { text: 'Galería', onPress: () => handlePickImageFromGallery(true) },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+    }
+  };
+
+  const openGarmentForm = (initialCategory = GARMENT_CATEGORIES.TOP, initialSubtype = '') => {
+    console.log('[DEBUG] Abriendo formulario de prenda. Categoría:', initialCategory, 'Subtipo:', initialSubtype);
+    setFormCategory(initialCategory);
+    setFormSubtype(initialSubtype);
     setFormColor('#CCC');
     setFormCustomColor('');
     setFormName('');
@@ -176,8 +286,10 @@ const InventarioScreen = () => {
     setIsProcessing(true);
 
     try {
-      const pg = pendingGarment.current;
+      const pg = pendingGarment;
       if (!pg) return;
+
+      console.log('[DEBUG] Guardando prenda. Categoría:', formCategory, 'Subtipo:', formSubtype, 'Tipo de origen:', pg.type);
 
       if (pg.type === 'photo') {
         setProcessingLabel('Subiendo imagen...');
@@ -199,7 +311,7 @@ const InventarioScreen = () => {
         await createGarmentFromEmoji(userId, pg.emoji, formCategory, color, formSubtype, notes);
       }
 
-      pendingGarment.current = null;
+      setPendingGarment(null);
       refresh();
     } catch (err) {
       logger.warn('[Inventory] Error al crear prenda:', err.message);
@@ -212,36 +324,17 @@ const InventarioScreen = () => {
     }
   };
 
-  const handleTakePhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Se necesita acceso a la cámara para tomar fotos.');
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.7,
-        allowsEditing: true,
-        aspect: [1, 1],
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-
-      pendingGarment.current = { type: 'photo', uri: result.assets[0].uri };
-      openGarmentForm();
-    } catch (err) {
-      logger.warn('[Inventory] Error al tomar foto:', err.message);
-      Alert.alert('Error', 'No se pudo tomar la foto. Intenta de nuevo.');
-    }
-  };
-
   const handleOpenEmojiPicker = () => {
     setSelectedEmojiCategory(GARMENT_CATEGORIES.TOP);
     setShowEmojiPicker(true);
   };
 
   const handleSelectEmoji = (emoji) => {
-    pendingGarment.current = { type: 'emoji', emoji, category: selectedEmojiCategory };
-    openGarmentForm();
+    const category = getCategoryForEmoji(emoji);
+    const subtype = DEFAULT_SUBTYPE_BY_EMOJI[emoji] || '';
+    console.log('[DEBUG] Emoji seleccionado:', emoji, 'Categoría asignada:', category, 'Subtipo asignado:', subtype);
+    setPendingGarment({ type: 'emoji', emoji, category });
+    openGarmentForm(category, subtype);
   };
 
   const handleDeleteGarment = useCallback(async (garment) => {
@@ -644,11 +737,22 @@ const InventarioScreen = () => {
               <>
                 <TouchableOpacity
                   style={themedStyles.modalOption}
-                  onPress={handleTakePhoto}
+                  onPress={() => handleTakePhoto(false)}
                   disabled={isProcessing}
                 >
                   <Ionicons name="camera-outline" size={24} color={colors.text} />
                   <Text style={themedStyles.modalOptionText}>Tomar foto</Text>
+                </TouchableOpacity>
+
+                <View style={themedStyles.modalDivider} />
+
+                <TouchableOpacity
+                  style={themedStyles.modalOption}
+                  onPress={() => handlePickImageFromGallery(false)}
+                  disabled={isProcessing}
+                >
+                  <Ionicons name="image-outline" size={24} color={colors.text} />
+                  <Text style={themedStyles.modalOptionText}>Subir foto (Galería)</Text>
                 </TouchableOpacity>
 
                 <View style={themedStyles.modalDivider} />
@@ -746,7 +850,7 @@ const InventarioScreen = () => {
             </View>
 
             {/* Image preview */}
-            {pendingGarment.current?.type === 'photo' ? (
+            {pendingGarment?.type === 'photo' ? (
               <View style={themedStyles.formImagePreviewCard}>
                 {imageLoadError ? (
                   <View style={[themedStyles.formImagePlaceholder, { maxHeight: previewHeight }]}>
@@ -755,16 +859,16 @@ const InventarioScreen = () => {
                   </View>
                 ) : (
                   <Image
-                    source={{ uri: pendingGarment.current.uri }}
+                    source={{ uri: pendingGarment.uri }}
                     style={[themedStyles.formImagePreview, { maxHeight: previewHeight }]}
                     resizeMode="contain"
                     onError={() => setImageLoadError(true)}
                   />
                 )}
               </View>
-            ) : pendingGarment.current?.type === 'emoji' ? (
+            ) : pendingGarment?.type === 'emoji' ? (
               <View style={themedStyles.formEmojiPreviewCard}>
-                <Text style={themedStyles.formEmojiPreview}>{pendingGarment.current.emoji}</Text>
+                <Text style={themedStyles.formEmojiPreview}>{pendingGarment.emoji}</Text>
               </View>
             ) : null}
 
@@ -914,9 +1018,9 @@ const InventarioScreen = () => {
               <View style={themedStyles.formFooter}>
                 <TouchableOpacity
                   style={themedStyles.formChangePhotoBtn}
-                  onPress={pendingGarment.current?.type === 'photo' ? handleRetakePhoto : undefined}
+                  onPress={pendingGarment?.type === 'photo' ? handleChangePhoto : undefined}
                 >
-                  {pendingGarment.current?.type === 'photo' && (
+                  {pendingGarment?.type === 'photo' && (
                     <>
                       <Ionicons name="camera-outline" size={16} color="#E67E22" />
                       <Text style={themedStyles.formChangePhotoText}>Cambiar foto</Text>
@@ -924,9 +1028,15 @@ const InventarioScreen = () => {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[themedStyles.formNextBtn, !formSubtype && themedStyles.formNextBtnDisabled]}
-                  disabled={!formSubtype}
-                  onPress={() => setFormStep(formStep + 1)}
+                  style={[
+                    themedStyles.formNextBtn,
+                    (!formSubtype || !pendingGarment) && themedStyles.formNextBtnDisabled
+                  ]}
+                  disabled={!formSubtype || !pendingGarment}
+                  onPress={() => {
+                    console.log('[DEBUG] Avanzando al paso:', formStep + 1);
+                    setFormStep(formStep + 1);
+                  }}
                 >
                   <Text style={themedStyles.formNextBtnText}>Siguiente</Text>
                 </TouchableOpacity>
