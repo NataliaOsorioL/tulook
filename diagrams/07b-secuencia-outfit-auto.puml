@@ -27,6 +27,7 @@ caption "Algoritmo de generación con 2 intentos + scoring heurístico"
 
 actor "Usuario" as user
 participant "OutfitScreen" as out
+participant "AuthContext" as aCtx
 participant "auth.service" as auth
 participant "outfit.service" as osvc
 participant "outfit-generator-v2" as gen
@@ -57,10 +58,10 @@ alt Pre-check falla
   deactivate out
 
 else Pre-check exitoso
-  out -> auth : ensureSignedIn()
-  activate auth
-  auth --> out : userId
-  deactivate auth
+  note right of out
+    userId obtenido de
+    useAuth() (contexto)
+  end note
 
   out -> osvc : getRecentOutfitGarmentIds(userId)
   activate osvc

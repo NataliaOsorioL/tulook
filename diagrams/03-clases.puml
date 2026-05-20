@@ -157,9 +157,14 @@ end note
 package "Servicios" as services {
 
   class "auth.service" as Auth <<Service>> {
-    + {static} initAuth() : void
+    + {static} login(email, password) : Promise<User>
+    + {static} registerUser(email, password) : Promise<User>
+    + {static} resetPassword(email) : Promise<void>
+    + {static} logout() : Promise<void>
+    + {static} onAuthChanged(callback) : Function
+    + {static} getCurrentUser() : User | null
     + {static} ensureSignedIn() : Promise<string>
-    + {static} getCurrentUserId() : string
+    + {static} getAuthErrorMessage(error) : string
   }
 
   class "user.service" as USvc <<Service>> {
@@ -220,12 +225,17 @@ package "Servicios" as services {
     + {static} schedule(title, body, trigger) : Promise<void>
     + {static} TEMPLATES : Object
   }
+
+  class "user.bootstrap.service" as Boot <<Service>> {
+    + {static} initializeAppForUser(userId, email) : Promise<void>
+    + {static} migrateLegacyUserData(userId) : Promise<MigrationResult>
+  }
 }
 
 ' =============================================================================
 ' DEPENDENCIAS ENTRE SERVICIOS
 ' =============================================================================
-Auth ..> USvc : getUserProfile(), createUserProfile()
+Boot ..> USvc : getUserProfile(), createUserProfile()
 Home ..> USvc : getUserProfile()
 Home ..> GSvc : getRecentGarments()
 Home ..> OSvc : getOrGenerateDailyOutfit()
@@ -278,11 +288,27 @@ package "Hooks y Contexto" as hooks {
     + {static} lightColors : ColorPalette
     + {static} darkColors : ColorPalette
   }
+
+  class "AuthContext" as ACtx <<Context>> {
+    + {static} AuthProvider({ children }) : JSX
+    + {static} useAuth()
+    -- Provee --
+    + user: User | null
+    + userId: string | null
+    + isAuthenticated: boolean
+    + isLoading: boolean
+    + login(email, password) : Promise<void>
+    + register(email, password) : Promise<void>
+    + logout() : Promise<void>
+    + resetPassword(email) : Promise<void>
+  }
 }
 
 ' =============================================================================
 ' DEPENDENCIAS: HOOKS → SERVICIOS
 ' =============================================================================
+ACtx ..> Auth : login(), registerUser(), logout(),\nresetPassword(), onAuthChanged()
+ACtx ..> Boot : initializeAppForUser()
 useG ..> GSvc : getGarmentsByUser(), deleteGarment(),\ndeleteAllGarments()
 useG ..> OSvc : deleteAllUserOutfits()
 useG ..> Auth : ensureSignedIn()
@@ -341,8 +367,8 @@ package "Utilidades" as utils {
   }
 
   class "outfit-generator" as GenV1 <<Module>> {
-    note "LEGACY — sin uso en la app"
   }
+  note right of GenV1 : LEGACY — sin uso en la app
 
   class "notification-helpers" as NHlpr <<Module>> {
     + {static} scheduleDailyOutfitReminder(time?) : Promise<void>
@@ -383,11 +409,13 @@ package "Configuración y Datos" as config {
 ' =============================================================================
 ' DEPENDENCIAS: SERVICIOS → CONFIG/UTILIDADES
 ' =============================================================================
+Boot ..> FbCfg : db (Firestore)
 GSvc ..> FbCfg : db (Firestore)
 OSvc ..> FbCfg : db
 WSvc ..> FbCfg : db
 USvc ..> FbCfg : db
 
+Boot ..> Seed : seedForUser(), validateFirestoreData()
 GSvc ..> Const : FIRESTORE_COLLECTIONS
 OSvc ..> Const : FIRESTORE_COLLECTIONS
 WSvc ..> Const : FIRESTORE_COLLECTIONS, WEATHER_CACHE_TTL_MINUTES
@@ -397,6 +425,7 @@ Home ..> Const : GARMENT_CATEGORIES_LABELS
 WSvc ..> WMap : mapOwmIconToIonicon(), buildWeatherText(),\ngetDefaultWeather()
 OSvc ..> GenV2 : selectDailyOutfitGarments(),\ncanGenerateOutfit(), getDateString(), todayString()
 
+Boot ..> Log
 GSvc ..> Log
 OSvc ..> Log
 WSvc ..> Log
@@ -418,20 +447,20 @@ useO ..> Log
 ' =============================================================================
 note top of services
   **Inconsistencias estructurales:**
-  1. auth.service y user.service tienen
-     dependencia circular funcional:
-     auth → user (crear/leer perfil) y
-     notification → user + auth
-  2. outfit.service depende de
+  1. outfit.service depende de
      garment.service (acoplamiento
      entre servicios del mismo nivel)
-  3. home.service es un orquestador
+  2. home.service es un orquestador
      que acopla 4 servicios en una
      sola función (getHomeDashboard)
-  4. Los hooks (useGarments, useOutfits)
+  3. Los hooks (useGarments, useOutfits)
      implementan optimist UI: actualizan
      estado local ANTES de la operación
      remota, con rollback en error
+  4. AuthContext media entre screens
+     y auth.service, pero hooks y
+     ThemeContext siguen llamando
+     ensureSignedIn() directamente
 end note
 
 note top of entities

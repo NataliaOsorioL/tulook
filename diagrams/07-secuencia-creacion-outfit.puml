@@ -32,6 +32,7 @@ title "Flujo 4: Creación de Outfit"
 actor "Usuario" as user
 participant "OutfitScreen" as out
 participant "useGarments" as hook
+participant "AuthContext" as aCtx
 participant "auth.service" as auth
 participant "outfit.service" as osvc
 participant "garment.service" as gsvc
@@ -96,10 +97,10 @@ alt Validación falla
   out -> user : Alert("Corrige la selección")
   note right : Retorna sin guardar
 else Validación exitosa
-  out -> auth : ensureSignedIn()
-  activate auth
-  auth --> out : userId
-  deactivate auth
+  note right of out
+    userId obtenido de
+    useAuth() (contexto)
+  end note
 
   out -> osvc : saveOutfitManually(userId, list, names)
   activate osvc
@@ -141,10 +142,10 @@ alt Pre-check falla
   deactivate gen
   out -> user : Alert("No se pudo generar")
 else Pre-check exitoso
-  out -> auth : ensureSignedIn()
-  activate auth
-  auth --> out : userId
-  deactivate auth
+  note right of out
+    userId obtenido de
+    useAuth() (contexto)
+  end note
 
   out -> osvc : getRecentOutfitGarmentIds(userId)
   activate osvc

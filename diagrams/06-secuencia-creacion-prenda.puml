@@ -32,6 +32,7 @@ title "Flujo 3: Creación de Prenda"
 actor "Usuario" as user
 participant "InventoryScreen" as inv
 participant "Expo\nImagePicker" as picker
+participant "AuthContext" as aCtx
 participant "useGarments" as hook
 participant "auth.service" as auth
 participant "garment.service" as gsvc
@@ -98,10 +99,10 @@ inv -> inv : saveGarment()
 
 == Procesamiento y guardado ==
 
-inv -> auth : ensureSignedIn()
-activate auth
-auth --> inv : "seed-user-001"
-deactivate auth
+note right of inv
+  userId obtenido de
+  useAuth() (contexto)
+end note
 
 alt Tipo: photo
   inv -> inv : setProcessingLabel("Subiendo imagen...")

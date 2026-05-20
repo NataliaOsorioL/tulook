@@ -28,6 +28,7 @@ caption "Selección por categorías + guardado en Firestore"
 actor "Usuario" as user
 participant "OutfitScreen" as out
 participant "useGarments" as hook
+participant "AuthContext" as aCtx
 participant "auth.service" as auth
 participant "outfit.service" as osvc
 participant "garment.service" as gsvc
@@ -95,10 +96,10 @@ alt Falló validación
   out -> user : Alert("Corrige la selección")
   note right : No guarda
 else Validación exitosa
-  out -> auth : ensureSignedIn()
-  activate auth
-  auth --> out : userId
-  deactivate auth
+  note right of out
+    userId obtenido de
+    useAuth() (contexto)
+  end note
 
   out -> osvc : saveOutfitManually(userId, list, name)
   activate osvc

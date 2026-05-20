@@ -1,7 +1,7 @@
 @startuml
 '
 ' Diagrama de Secuencia - Inicialización de la App
-' Basado en App.js + ThemeContext + seed.js
+' Basado en App.js + AuthContext + user.bootstrap.service + seed.js
 '
 
 !theme plain
@@ -34,63 +34,87 @@ title "Flujo 1: Inicialización de la Aplicación"
 
 actor "Usuario" as user
 participant "App.js" as app
+participant "AuthContext" as aCtx
 participant "ThemeContext" as tctx
 participant "auth.service" as auth
+participant "user.bootstrap\n.service" as boot
 participant "user.service" as usvc
 participant "seed.js" as seed
 participant "garment.service" as gsvc
 database "Firebase\nFirestore" as fb
+boundary "Firebase\nAuth" as fba
 
 == Render inicial ==
 
 user -> app : Abre la app
 activate app
 
-app -> app : initializeApp()\n(useEffect, una vez)
+app -> aCtx : <AuthProvider>
+activate aCtx
+aCtx -> aCtx : useEffect → onAuthChanged(fba)
+activate fba
+fba --> aCtx : null (no autenticado)
+deactivate fba
+aCtx -> app : { isAuthenticated: false }
+deactivate aCtx
 
 app -> tctx : <ThemeProvider>
 activate tctx
 
-tctx -> auth : ensureSignedIn()
-activate auth
-auth -> usvc : getUserProfile(FIXED_USER_ID)
+alt No autenticado
+  app -> app : Renderiza LoginScreen (Guest Stack)
+  app -> user : Muestra pantalla de inicio de sesión
+  deactivate app
+
+  user -> app : Ingresa email + contraseña
+  activate app
+  app -> aCtx : login(email, password)
+  activate aCtx
+  aCtx -> auth : login(email, password)
+  activate auth
+  auth -> fba : signInWithEmailAndPassword()
+  fba --> auth : UserCredential
+  auth --> aCtx : user
+  deactivate auth
+  deactivate aCtx
+  deactivate app
+
+else Autenticado por persistencia
+  note right of aCtx
+    Firebase Auth restaura
+    sesión previa automáticamente
+  end note
+end
+
+== Post-autenticación ==
+
+aCtx -> aCtx : useEffect → user cambió
+aCtx -> boot : initializeAppForUser(userId, email)
+activate boot
+
+boot -> usvc : getUserProfile(userId)
 activate usvc
-usvc -> fb : getDoc("users/{FIXED_USER_ID}")
+usvc -> fb : getDoc("users/{uid}")
 fb --> usvc : snapshot | null
 
 alt Perfil no existe
-  usvc -> fb : setDoc("users/{FIXED_USER_ID}",\n{ name, email, ... })
+  usvc -> fb : setDoc("users/{uid}",\n{ name, email, ... })
   fb --> usvc : ok
-  usvc --> auth : null (creado)
+  usvc --> boot : perfil creado
 else Perfil existe
-  usvc --> auth : User
+  usvc --> boot : UserProfile
 end
 deactivate usvc
-auth --> tctx : FIXED_USER_ID
-deactivate auth
 
-tctx -> usvc : getUserProfile(FIXED_USER_ID)
-activate usvc
-usvc -> fb : getDoc("users/{uid}")
-fb --> usvc : { theme: "light", ... }
-usvc --> tctx : UserProfile
-deactivate usvc
+boot -> boot : migrateLegacyUserData(userId)
+note right
+  Migra datos desde
+  seed-user-001 a la
+  nueva cuenta si
+  aplica (solo una vez)
+end note
 
-tctx -> tctx : setThemeMode(resolved)\n(Listen system theme changes)
-
-tctx --> app : ThemeProvider listo
-deactivate tctx
-
-== Inicialización del sistema ==
-
-app -> auth : ensureSignedIn()
-activate auth
-auth -> usvc : getUserProfile(FIXED_USER_ID)
-usvc --> auth : profile
-auth --> app : "seed-user-001"
-deactivate auth
-
-app -> seed : seedForUser("seed-user-001")
+boot -> seed : seedForUser(userId)
 activate seed
 
 seed -> gsvc : getGarmentsByUser(userId)
@@ -113,10 +137,10 @@ else Ya tiene prendas (omitido)
   note right : seed.skipped = true
 end
 
-seed --> app : { skipped, garments[] }
+seed --> boot : { skipped, garments[] }
 deactivate seed
 
-app -> seed : validateFirestoreData(userId)
+boot -> seed : validateFirestoreData(userId)
 activate seed
 seed -> gsvc : getGarmentsByUser(userId)
 activate gsvc
@@ -127,12 +151,38 @@ deactivate gsvc
 
 seed -> seed : Verificar categorías\n(top, bottom, shoes, dress, accessory)
 
-seed --> app : ValidationCheck[]
+seed --> boot : ValidationCheck[]
 deactivate seed
 
+boot --> aCtx : init completado
+deactivate boot
+
+== Carga de tema ==
+
+app -> tctx : <ThemeProvider> (re-render)
+activate tctx
+
+tctx -> auth : ensureSignedIn()
+activate auth
+auth --> tctx : userId (de getCurrentUser())
+deactivate auth
+
+tctx -> usvc : getUserProfile(userId)
+activate usvc
+usvc -> fb : getDoc("users/{uid}")
+fb --> usvc : { theme, ... }
+usvc --> tctx : UserProfile
+deactivate usvc
+
+tctx -> tctx : setThemeMode(resolved)\n(Listen system theme changes)
+
+tctx --> app : ThemeProvider listo
+deactivate tctx
+
 note right of app
-  NavigationContainer +
-  BottomTabNavigator renderizado\ncon 5 tabs
+  RootStack con
+  BottomTabNavigator
+  (5 tabs) renderizado
 end note
 
 app -> user : Muestra HomeScreen

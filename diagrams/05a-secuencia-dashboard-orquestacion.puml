@@ -28,7 +28,7 @@ caption "HomeScreen → home.service (vista de alto nivel)"
 
 actor "Usuario" as user
 participant "HomeScreen" as home
-participant "auth.service" as auth
+participant "AuthContext" as aCtx
 participant "Expo Location" as loc
 participant "home.service" as homeSvc
 participant "user.service" as usvc
@@ -43,12 +43,12 @@ boundary "OpenWeatherMap" as owm
 user -> home : Navega a "Inicio"
 activate home
 
-home -> home : useFocusEffect\n→ loadDashboard()
+home -> home : useAuth() → userId\nuseFocusEffect → loadDashboard()
 
-home -> auth : ensureSignedIn()
-activate auth
-auth --> home : "seed-user-001"
-deactivate auth
+note right of home
+  userId obtenido de
+  AuthContext (contexto)
+end note
 
 group Obtener ubicación [opcional]
   home -> loc : requestForegroundPermissionsAsync()

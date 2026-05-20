@@ -31,7 +31,7 @@ title "Flujo 5: Estadísticas"
 
 actor "Usuario" as user
 participant "StatisticScreen" as stats
-participant "auth.service" as auth
+participant "AuthContext" as aCtx
 participant "garment.service" as gsvc
 participant "outfit.service" as osvc
 database "Firebase\nFirestore" as fb
@@ -41,12 +41,12 @@ database "Firebase\nFirestore" as fb
 user -> stats : Selecciona tab "Estadísticas"
 activate stats
 
-stats -> stats : useFocusEffect → loadStats()
+stats -> stats : useAuth() → userId\nuseFocusEffect → loadStats()
 
-stats -> auth : ensureSignedIn()
-activate auth
-auth --> stats : "seed-user-001"
-deactivate auth
+note right of stats
+  userId obtenido de
+  useAuth() (contexto)
+end note
 
 == Carga paralela de datos ==
 

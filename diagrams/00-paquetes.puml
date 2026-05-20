@@ -27,13 +27,13 @@ top to bottom direction
 
 package "Capa de Presentación\n<Screens + SafeImage>" as pres #E8F4F8 {
 }
-package "Capa de Manejo de Estado\n<Hooks + Contexto>" as state #F0E6F6 {
+package "Capa de Manejo de Estado\n<Hooks + Contexto\n(AuthContext, ThemeContext)>" as state #F0E6F6 {
 }
-package "Capa de Servicios\n<8 módulos funcionales>" as svc #E8F8E8 {
+package "Capa de Servicios\n<9 módulos funcionales>" as svc #E8F8E8 {
 }
 package "Capa de Utilidades\ny Configuración\n<constants, logger, generadores,\n firebase.js, seed.js>" as utils #FFF8DC {
 }
-package "Sistemas Externos\n<Firebase Firestore,\n GitHub API, OpenWeatherMap,\n Expo SDK>" as ext #F5F5F5 {
+package "Sistemas Externos\n<Firebase Firestore,\n Firebase Auth, GitHub API,\n OpenWeatherMap, Expo SDK>" as ext #F5F5F5 {
 }
 
 ' Dependencias entre capas

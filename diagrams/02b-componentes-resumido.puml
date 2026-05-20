@@ -37,6 +37,9 @@ top to bottom direction
 ' ============================================================================
 package "Capa de Presentación" #E8F4F8 {
   [App.js]
+  [LoginScreen]
+  [RegisterScreen]
+  [ForgotPasswordScreen]
   [HomeScreen]
   [InventoryScreen]
   [OutfitScreen]
@@ -49,6 +52,7 @@ package "Capa de Presentación" #E8F4F8 {
 ' LAYER 2: ESTADO
 ' ============================================================================
 package "Manejo de Estado" #F0E6F6 {
+  [AuthContext]
   [useGarments]
   [useOutfits]
   [ThemeContext]
@@ -66,6 +70,7 @@ package "Capa de Servicios" #E8F8E8 {
   [github.service]
   [home.service]
   [notification.service]
+  [user.bootstrap.service]
 }
 
 ' ============================================================================
@@ -75,18 +80,21 @@ package "Utilidades y Configuración" #FFF8DC {
   [constants]
   [logger]
   [weather-mapper]
-  [outfit-generator]   note "LEGACY"
+  [outfit-generator] as ogLegacy
   [outfit-generator-v2]
   [notification-helpers]
   [firebase.js]
   [seed.js]
 }
 
+note right of ogLegacy : LEGACY (sin uso)
+
 ' ============================================================================
 ' LAYER 5: EXTERNOS
 ' ============================================================================
 package "Sistemas Externos" #F5F5F5 {
   database "Firebase\nFirestore" as fb
+  [Firebase Auth]
   [GitHub REST API]
   [OpenWeatherMap API]
   [Expo SDK]

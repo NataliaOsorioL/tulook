@@ -31,7 +31,7 @@ title "Flujo 2: Dashboard Principal"
 
 actor "Usuario" as user
 participant "HomeScreen" as home
-participant "auth.service" as auth
+participant "AuthContext" as aCtx
 participant "Expo\nLocation" as loc
 participant "home.service" as homeSvc
 participant "user.service" as usvc
@@ -47,12 +47,13 @@ boundary "OpenWeatherMap\nAPI" as owm
 user -> home : Selecciona tab "Inicio"
 activate home
 
-home -> home : useFocusEffect → loadDashboard()
+home -> home : useAuth() → userId\nuseFocusEffect → loadDashboard()
 
-home -> auth : ensureSignedIn()
-activate auth
-auth --> home : "seed-user-001"
-deactivate auth
+note right of home
+  userId ya disponible
+  desde AuthContext
+  (inicialización previa)
+end note
 
 home -> loc : requestForegroundPermissionsAsync()
 activate loc

@@ -50,6 +50,9 @@ top to bottom direction
 ' =============================================================================
 package "Capa de Presentación" as ui {
   [App.js] as app
+  [LoginScreen] as loginSc
+  [RegisterScreen] as regSc
+  [ForgotPasswordScreen] as forgotSc
   [HomeScreen] as homeSc
   [InventoryScreen] as invSc
   [OutfitScreen] as outSc
@@ -62,6 +65,7 @@ package "Capa de Presentación" as ui {
 ' LAYER 2: ESTADO (State Management)
 ' =============================================================================
 package "Manejo de Estado" as state {
+  [AuthContext] as aCtx
   [useGarments] as hookG
   [useOutfits] as hookO
   [ThemeContext] as themeCtx
@@ -79,6 +83,7 @@ package "Capa de Servicios" as svc {
   [weather.service] as wSvc
   [github.service] as ghSvc
   [notification.service] as nSvc
+  [user.bootstrap.service] as bootSvc
 }
 
 ' =============================================================================
@@ -100,6 +105,7 @@ package "Utilidades y Configuración" as utils {
 ' =============================================================================
 package "Sistemas Externos" as ext {
   database "Firebase\nFirestore" as fb
+  cloud "Firebase\nAuth" as fba
   cloud "GitHub\nREST API" as ghApi
   cloud "OpenWeatherMap\nAPI" as owmApi
   component "Expo SDK" as expo {
@@ -130,11 +136,13 @@ note left of oSvc
 end note
 
 note right of authSvc
-  **Auth fijo (desarrollo)**
-  ensureSignedIn() siempre retorna
-  EXPO_PUBLIC_FIXED_USER_ID.
-  El perfil se auto-crea si no existe.
-  Sin autenticación real.
+  **Auth con Firebase Auth real**
+  login(), registerUser(),
+  resetPassword(), logout(),
+  onAuthChanged() y getCurrentUser()
+  con Firebase Authentication.
+  ensureSignedIn() usa getCurrentUser()
+  y ya no retorna un ID fijo.
 end note
 
 note left of genV1
@@ -162,9 +170,11 @@ end note
 ' =============================================================================
 ' DEPENDENCIAS: APP.JS
 ' =============================================================================
-app --> authSvc : ensureSignedIn()
-app --> seed : seedForUser(), validateFirestoreData()
-app --> themeCtx : ThemeProvider, useTheme()
+app --> aCtx : AuthProvider
+app --> themeCtx : ThemeProvider
+app --> loginSc
+app --> regSc
+app --> forgotSc
 app --> homeSc
 app --> invSc
 app --> outSc
@@ -174,6 +184,14 @@ app --> cfgSc
 ' =============================================================================
 ' DEPENDENCIAS: UI → ESTADO
 ' =============================================================================
+loginSc --> aCtx : useAuth() (login)
+regSc --> aCtx : useAuth() (register)
+forgotSc --> aCtx : useAuth() (resetPassword)
+homeSc --> aCtx : useAuth() (userId)
+invSc --> aCtx : useAuth() (userId)
+outSc --> aCtx : useAuth() (userId)
+statSc --> aCtx : useAuth() (userId)
+cfgSc --> aCtx : useAuth() (userId, logout)
 homeSc --> themeCtx : useTheme()
 invSc --> themeCtx
 invSc --> hookG : useGarments()
@@ -186,14 +204,9 @@ cfgSc --> themeCtx
 ' DEPENDENCIAS: UI → SERVICIOS
 ' =============================================================================
 homeSc --> homeSvc : getHomeDashboard()
-homeSc --> authSvc : ensureSignedIn()
-invSc --> authSvc : ensureSignedIn()
-outSc --> authSvc : ensureSignedIn()
 outSc --> oSvc : saveOutfitManually()
 statSc --> gSvc : getGarmentsByUser()
 statSc --> oSvc : getAllUserOutfits()
-statSc --> authSvc : ensureSignedIn()
-cfgSc --> authSvc : ensureSignedIn()
 cfgSc --> uSvc : getUserProfile(), updateUserProfile()
 cfgSc --> nSvc : enable(), disable()
 
@@ -219,6 +232,9 @@ cfgSc --> safeImg
 ' =============================================================================
 ' DEPENDENCIAS: ESTADO → SERVICIOS
 ' =============================================================================
+aCtx --> authSvc : login(), registerUser(), logout(),
+                    resetPassword(), onAuthChanged()
+aCtx --> bootSvc : initializeAppForUser()
 hookG --> gSvc : getGarmentsByUser(), deleteGarment(),
                   deleteAllGarments()
 hookG --> oSvc : deleteAllUserOutfits()
@@ -239,6 +255,7 @@ hookO --> log
 ' =============================================================================
 ' DEPENDENCIAS: SERVICIO → SERVICIO
 ' =============================================================================
+bootSvc --> uSvc : getUserProfile(), createUserProfile()
 homeSvc --> uSvc : getUserProfile()
 homeSvc --> gSvc : getRecentGarments()
 homeSvc --> oSvc : getOrGenerateDailyOutfit()
@@ -270,6 +287,8 @@ ghSvc --> log
 nSvc --> log
 homeSvc --> consts : GARMENT_CATEGORIES_LABELS
 
+bootSvc --> seed : seedForUser(), validateFirestoreData()
+bootSvc --> log
 seed --> gSvc : getGarmentsByUser(), createGarment()
 seed --> consts : GARMENT_CATEGORIES, SEASON_TAGS,
                   FIRESTORE_COLLECTIONS
@@ -291,10 +310,14 @@ nHlpr --> log
 ' =============================================================================
 fbCfg --> fb : Firestore SDK (lectura/escritura)
 
+aCtx --> fba : onAuthStateChanged()
+loginSc --> fba : signInWithEmailAndPassword()\n(vía auth.service)
+
 gSvc --> fbCfg : db (Firestore instance)
 oSvc --> fbCfg : db
 wSvc --> fbCfg : db
 uSvc --> fbCfg : db
+bootSvc --> fbCfg : db (Firestore instance)
 
 ghSvc --> ghApi : PUT/DELETE Contents API
 wSvc --> owmApi : GET /data/2.5/weather
